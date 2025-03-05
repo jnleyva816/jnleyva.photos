@@ -4,8 +4,6 @@ import { clsx } from 'clsx/lite';
 import SiteGrid from '../components/SiteGrid';
 import ThemeSwitcher from '@/app/ThemeSwitcher';
 import Link from 'next/link';
-import { SHOW_REPO_LINK } from '@/app/config';
-import RepoLink from '../components/RepoLink';
 import { usePathname } from 'next/navigation';
 import { PATH_ADMIN_PHOTOS, isPathAdmin, isPathSignIn } from './paths';
 import SubmitButtonWithStatus from '@/components/SubmitButtonWithStatus';
@@ -60,8 +58,6 @@ export default function Footer() {
                     <Link href={PATH_ADMIN_PHOTOS}>
                       Admin
                     </Link>
-                    {SHOW_REPO_LINK &&
-                      <RepoLink />}
                   </>}
               </div>
               <div className="flex items-center h-10">
