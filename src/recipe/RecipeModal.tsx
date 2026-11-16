@@ -1,8 +1,8 @@
 'use client';
 
 import Modal from '@/components/Modal';
-import { useAppState } from '@/state/AppState';
-import PhotoRecipeOverlay from './PhotoRecipeGrid';
+import { useAppState } from '@/app/AppState';
+import PhotoRecipeOverlay from './PhotoRecipeOverlay';
 
 export default function ShareModals() {
   const {
@@ -12,13 +12,13 @@ export default function ShareModals() {
 
   if (recipeModalProps) {
     return <Modal
-      className="bg-transparent!"
       onClose={() => setRecipeModalProps?.(undefined)}
       container={false}
     >
       <PhotoRecipeOverlay {...{
         ...recipeModalProps,
         onClose: () => setRecipeModalProps?.(undefined),
+        isOnPhoto: false,
       }}/>
     </Modal>;
   }

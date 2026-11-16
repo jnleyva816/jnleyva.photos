@@ -2,42 +2,59 @@
 
 import Spinner, { SpinnerColor } from '@/components/Spinner';
 import { clsx } from 'clsx/lite';
-import { ButtonHTMLAttributes, ReactNode } from 'react';
+import {
+  ButtonHTMLAttributes,
+  ComponentProps,
+  ReactNode,
+  RefObject,
+} from 'react';
+import Tooltip from '../Tooltip';
 
-export default function LoaderButton(props: {
+export default function LoaderButton({
+  ref,
+  children,
+  classNameIcon,
+  classNameContent,
+  isLoading,
+  icon,
+  spinnerColor,
+  spinnerClassName,
+  styleAs = 'button',
+  hideText = 'on-mobile',
+  confirmText,
+  shouldPreventDefault,
+  primary,
+  hideFocusOutline,
+  type = 'button',
+  onClick,
+  disabled,
+  className,
+  tooltip,
+  tooltipColor,
+  tooltipSide,
+  ...rest
+}: {
+  ref?: RefObject<HTMLButtonElement | null>
+  classNameIcon?: string
+  classNameContent?: string
   isLoading?: boolean
   icon?: ReactNode
   spinnerColor?: SpinnerColor
   spinnerClassName?: string
   styleAs?: 'button' | 'link' | 'link-without-hover'
-  hideTextOnMobile?: boolean
+  hideText?: 'always' | 'on-mobile' | 'never'
   confirmText?: string
   shouldPreventDefault?: boolean
   primary?: boolean
   hideFocusOutline?: boolean
+  tooltip?: string
+  tooltipColor?: ComponentProps<typeof Tooltip>['color']
+  tooltipSide?: ComponentProps<typeof Tooltip>['side']
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
-  const {
-    children,
-    isLoading,
-    icon,
-    spinnerColor,
-    spinnerClassName,
-    styleAs = 'button',
-    hideTextOnMobile = true,
-    confirmText,
-    shouldPreventDefault,
-    primary,
-    hideFocusOutline,
-    type = 'button',
-    onClick,
-    disabled,
-    className,
-    ...rest
-  } = props;
-
-  return (
+  const button =
     <button
       {...rest}
+      ref={ref}
       type={type}
       onClick={e => {
         if (shouldPreventDefault) { e.preventDefault(); }
@@ -46,7 +63,6 @@ export default function LoaderButton(props: {
         }
       }}
       className={clsx(
-        'font-mono',
         ...(styleAs !== 'button'
           ? [
             'link h-4 active:text-medium',
@@ -56,36 +72,57 @@ export default function LoaderButton(props: {
         ),
         styleAs === 'link' && 'hover:text-dim',
         styleAs === 'link-without-hover' && 'hover:text-main',
-        'inline-flex items-center gap-2 self-start whitespace-nowrap',
+        'inline-flex items-center gap-1.5 self-start whitespace-nowrap',
         primary && 'primary',
-        hideFocusOutline && 'focus:outline-hidden',
+        // Hide mouse-click focus ring, but keep one for keyboard navigation
+        hideFocusOutline && [
+          'focus:outline-hidden',
+          'focus-visible:outline-2',
+          'focus-visible:outline-blue-600',
+          'focus-visible:outline-offset-2',
+        ],
         className,
       )}
       disabled={isLoading || disabled}
     >
-      {(icon || isLoading) &&
+      {icon &&
         <span className={clsx(
-          'min-w-[1.25rem] max-h-5',
-          styleAs === 'button' ? 'translate-y-[-0.5px]' : 'translate-y-[0.5px]',
-          'inline-flex justify-center shrink-0',
+          'relative inline-flex items-center justify-center shrink-0',
+          // Fallback when caller doesn’t pass a fixed slot (e.g. MoreMenuItem)
+          !classNameIcon && 'min-w-[1.25rem] h-5',
+          styleAs === 'button' && 'translate-y-[-0.5px]',
+          classNameIcon,
         )}>
-          {isLoading
-            ? <Spinner
-              size={14}
-              color={spinnerColor}
-              className={clsx(
-                'translate-y-[1px]',
-                spinnerClassName,
-              )}
-            />
-            : icon}
+          <span className={clsx(isLoading && 'invisible')}>{icon}</span>
+          {isLoading &&
+            <span className="absolute inset-0 flex items-center justify-center">
+              <Spinner
+                size={14}
+                color={spinnerColor}
+                className={spinnerClassName}
+              />
+            </span>}
         </span>}
       {children && <span className={clsx(
         styleAs !== 'button' && isLoading && 'text-dim',
-        hideTextOnMobile && icon !== undefined && 'hidden sm:inline-block',
+        hideText === 'on-mobile' && Boolean(icon) && 'max-sm:hidden',
+        hideText === 'always' && 'hidden',
+        classNameContent,
       )}>
         {children}
       </span>}
-    </button>
+    </button>;
+
+  return (
+    tooltip
+      ? <Tooltip
+        content={tooltip}
+        color={tooltipColor}
+        side={tooltipSide}
+        triggerIsFocusable
+      >
+        {button}
+      </Tooltip>
+      : button
   );
 }

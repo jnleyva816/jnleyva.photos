@@ -3,57 +3,67 @@
 import { clsx } from 'clsx/lite';
 import {
   Photo,
-  PhotoDateRange,
-  PhotoSetCategory,
-  dateRangeForPhotos,
+  PhotoDateRangePostgres,
+  formattedDateRangeForPhotos,
   titleForPhoto,
 } from '.';
+import { PhotoSetCategory } from '../category';
 import ShareButton from '@/share/ShareButton';
 import AnimateItems from '@/components/AnimateItems';
 import { ReactNode } from 'react';
+import AppGrid from '@/components/AppGrid';
 import DivDebugBaselineGrid from '@/components/DivDebugBaselineGrid';
-import PhotoPrevNext from './PhotoPrevNext';
+import StickySubNav from '@/components/StickySubNav';
+import PhotoPrevNextActions from './PhotoPrevNextActions';
 import PhotoLink from './PhotoLink';
 import ResponsiveText from '@/components/primitives/ResponsiveText';
-import { useAppState } from '@/state/AppState';
+import { useAppState } from '@/app/AppState';
+import { GRID_GAP_CLASSNAME } from '@/components';
+import { useAppText } from '@/i18n/state/client';
+import { PHOTO_TITLE_SERIF, UPPERCASE_TITLES } from '@/app/config';
 
 export default function PhotoHeader({
-  tag,
-  camera,
-  simulation,
-  focal,
-  recipe,
   photos,
   selectedPhoto,
   entity,
-  entityVerb = 'PHOTO',
+  entityVerb: _entityVerb,
   entityDescription,
+  entitySubhead,
   indexNumber,
   count,
   dateRange,
+  richContent,
+  hasAiContentGeneration,
   includeShareButton,
+  ...categories
 }: {
   photos: Photo[]
   selectedPhoto?: Photo
   entity?: ReactNode
   entityVerb?: string
   entityDescription?: string
+  entitySubhead?: string
   indexNumber?: number
   count?: number
-  dateRange?: PhotoDateRange
+  dateRange?: PhotoDateRangePostgres
+  richContent?: ReactNode
+  hasAiContentGeneration: boolean
   includeShareButton?: boolean
 } & PhotoSetCategory) {
   const { isGridHighDensity } = useAppState();
 
-  const { start, end } = dateRangeForPhotos(photos, dateRange);
+  const appText = useAppText();
+
+  const entityVerb = _entityVerb ?? appText.photo.photo.toLocaleUpperCase();
+
+  const { start, end } = formattedDateRangeForPhotos(photos, dateRange);
 
   const selectedPhotoIndex = selectedPhoto
     ? photos.findIndex(photo => photo.id === selectedPhoto.id)
     : undefined;
 
-  const paginationLabel =
-    (indexNumber || (selectedPhotoIndex ?? 0 + 1)) + ' of ' +
-    (count ?? photos.length);
+  const paginationIndex = indexNumber || (selectedPhotoIndex ?? 0 + 1);
+  const paginationCount = count ?? photos.length;
 
   const headerType = selectedPhotoIndex === undefined
     ? 'photo-set'
@@ -61,123 +71,193 @@ export default function PhotoHeader({
       ? 'photo-detail-with-entity'
       : 'photo-detail';
 
-  const renderPrevNext = () =>
-    <PhotoPrevNext {...{
+  const renderPrevNext =
+    <PhotoPrevNextActions {...{
       photo: selectedPhoto,
       photos,
-      tag,
-      camera,
-      simulation,
-      focal,
-      recipe,
+      hasAiContentGeneration,
+      ...categories,
     }} />;
 
-  const renderDateRange = () =>
+  const renderDateRange =
     <span className="text-dim uppercase text-right">
-      {start === end
-        ? start
-        : <>{end}<br />– {start}</>}
+      {start || end
+        ? start === end
+          ? start
+          : <>{end}<br />&ndash; {start}</>
+        // Keep the two-line date slot when a set has no photos
+        : <>&nbsp;<br />&nbsp;</>}
     </span>;
 
-  const renderContentA = () => entity ?? (
-    selectedPhoto !== undefined &&
-      <PhotoLink
-        photo={selectedPhoto}
-        className="uppercase font-bold truncate"
-      >
-        {titleForPhoto(selectedPhoto, true)}
-      </PhotoLink>);
+  const renderContentA = entity
+    ? <div>
+      <div>{entity}</div>
+      {entitySubhead &&
+        <div className="text-dim whitespace-normal">
+          {entitySubhead}
+        </div>}
+    </div>
+    : (
+      selectedPhoto !== undefined &&
+        <PhotoLink
+          photo={selectedPhoto}
+          className={clsx(
+            PHOTO_TITLE_SERIF
+              // Instrument Serif only ships weight 400
+              ? clsx(
+                'font-serif leading-tight',
+                'text-[1.25rem] sm:text-[1.5rem]',
+              )
+              : 'font-bold',
+            UPPERCASE_TITLES && 'uppercase',
+          )}
+        >
+          {titleForPhoto(selectedPhoto, true)}
+        </PhotoLink>
+    );
+
+  const renderBlock = (content: ReactNode) =>
+    <DivDebugBaselineGrid
+      className={clsx(
+        'grid',
+        GRID_GAP_CLASSNAME,
+        'items-start',
+        'grid-cols-4',
+        isGridHighDensity && 'lg:grid-cols-6',
+      )}
+    >
+      {content}
+    </DivDebugBaselineGrid>;
+
+  const renderTitle = renderBlock(<>
+    {/* Content A: Filter Set or Photo Title */}
+    <div className={clsx(
+      'inline-flex',
+      (headerType !== 'photo-detail' || UPPERCASE_TITLES) && 'uppercase',
+      headerType === 'photo-set'
+        ? isGridHighDensity
+          ? 'col-span-2 lg:col-span-3'
+          : 'col-span-2 lg:col-span-2'
+        : headerType === 'photo-detail-with-entity'
+          ? isGridHighDensity
+            ? 'col-span-2 lg:col-span-3'
+            : 'col-span-2'
+          : isGridHighDensity
+            ? 'col-span-3 sm:col-span-3 lg:col-span-5 w-[110%] xl:w-full'
+            : 'col-span-3 w-[110%] xl:w-full',
+    )}>
+      {headerType === 'photo-detail-with-entity'
+        ? renderContentA
+        // Necessary for title truncation
+        : <h1 className={clsx(
+          'w-full truncate',
+          headerType !== 'photo-detail' && 'pr-1 sm:pr-2',
+        )}>
+          {renderContentA}
+        </h1>}
+    </div>
+    {/* Content B: Filter Set Meta or Photo Pagination */}
+    <div className={clsx(
+      'inline-flex gap-1 self-start',
+      'uppercase text-dim',
+      headerType === 'photo-set'
+        ? isGridHighDensity
+          ? 'col-span-2 sm:col-span-1 lg:col-span-2'
+          : 'col-span-2 sm:col-span-1'
+        : headerType === 'photo-detail-with-entity'
+          ? isGridHighDensity
+            ? 'col-span-1 lg:col-span-2'
+            : 'col-span-1'
+          : 'hidden!',
+    )}>
+      {entity && <>
+        {headerType === 'photo-set'
+          ? <>
+            {entityDescription}
+            {includeShareButton &&
+              <ShareButton {...{
+                photos,
+                ...categories,
+                count,
+                dateRange,
+                className: 'translate-x-[1px] translate-y-[1.5px] w-4',
+                prefetch: true,
+                dim: true,
+              }} />}
+          </>
+          : <ResponsiveText
+            shortText={appText.utility.paginate(
+              paginationIndex,
+              paginationCount,
+            )}
+          >
+            {appText.utility.paginateAction(
+              paginationIndex,
+              paginationCount,
+              entityVerb)}
+          </ResponsiveText>}
+      </>}
+    </div>
+    {/* Content C: Nav */}
+    <div className={clsx(
+      headerType === 'photo-set'
+        ? 'hidden sm:flex'
+        : 'flex',
+      'justify-end',
+      !entity && selectedPhoto !== undefined && PHOTO_TITLE_SERIF
+        // Center vertically with serif photo titles
+        ? 'h-full items-center -translate-y-0.5'
+        // Make full height for prev/next symbols
+        : 'max-sm:h-4',
+    )}>
+      {selectedPhoto
+        ? renderPrevNext
+        : renderDateRange}
+    </div>
+  </>);
+
+  // Descriptions stay in flow so a long album note doesn't stick
+  const renderRichContent = richContent
+    ? renderBlock(
+      <div className={clsx(
+        // Use 2/3 or 3/4 grid on larger screens
+        'col-span-4',
+        isGridHighDensity
+          ? 'lg:col-span-4'
+          : 'lg:col-span-3',
+        // Title bar keeps pb-8; preserve the previous 3rem gap
+        'mt-4 pb-8',
+      )}>
+        {richContent}
+      </div>,
+    )
+    : undefined;
 
   return (
-    <AnimateItems
-      type="bottom"
-      distanceOffset={10}
-      animateOnFirstLoadOnly
-      items={[<DivDebugBaselineGrid
-        key="PhotosHeader"
-        className={clsx(
-          'grid gap-0.5 sm:gap-1 items-start',
-          'grid-cols-4',
-          isGridHighDensity
-            ? 'lg:grid-cols-6'
-            : 'md:grid-cols-3 lg:grid-cols-4',
-        )}>
-        {/* Content A: Filter Set or Photo Title */}
-        <div className={clsx(
-          'inline-flex uppercase',
-          headerType === 'photo-set'
-            ? isGridHighDensity
-              ? 'col-span-2 sm:col-span-1 lg:col-span-2'
-              : 'col-span-2 sm:col-span-1'
-            : headerType === 'photo-detail-with-entity'
-              ? isGridHighDensity
-                ? 'col-span-2 sm:col-span-1 lg:col-span-2'
-                : 'col-span-2 sm:col-span-1'
-              : isGridHighDensity
-                ? 'col-span-3 sm:col-span-3 lg:col-span-5 w-[110%] xl:w-full'
-                : 'col-span-3 md:col-span-2 lg:col-span-3 w-[110%] xl:w-full',
-        )}>
-          {headerType === 'photo-detail-with-entity'
-            ? renderContentA()
-            // Necessary for title truncation
-            : <h1 className={clsx(
-              'w-full truncate',
-              headerType !== 'photo-detail' && 'pr-1 sm:pr-2',
-            )}>
-              {renderContentA()}
-            </h1>}
-        </div>
-        {/* Content B: Filter Set Meta or Photo Pagination */}
-        <div className={clsx(
-          'inline-flex gap-2 self-start',
-          'uppercase text-dim',
-          headerType === 'photo-set'
-            ? isGridHighDensity
-              ? 'col-span-2 lg:col-span-3'
-              : 'col-span-2 md:col-span-1 lg:col-span-2'
-            : headerType === 'photo-detail-with-entity'
-              ? isGridHighDensity
-                ? 'sm:col-span-2 lg:col-span-3'
-                : 'sm:col-span-2 md:col-span-1 lg:col-span-2'
-              : 'hidden!',
-        )}>
-          {entity && <>
-            {headerType === 'photo-set'
-              ? <>
-                {entityDescription}
-                {includeShareButton &&
-                  <ShareButton
-                    photos={photos}
-                    tag={tag}
-                    camera={camera}
-                    simulation={simulation}
-                    recipe={recipe}
-                    focal={focal}
-                    count={count}
-                    dateRange={dateRange}
-                    className="translate-y-[1.5px]"
-                    prefetch
-                    dim
-                  />}
-              </>
-              : <ResponsiveText shortText={paginationLabel}>
-                {entityVerb} {paginationLabel}
-              </ResponsiveText>}
-          </>}
-        </div>
-        {/* Content C: Nav */}
-        <div className={clsx(
-          headerType === 'photo-set'
-            ? 'hidden sm:flex'
-            : 'flex',
-          'justify-end',
-        )}>
-          {selectedPhoto
-            ? renderPrevNext()
-            : renderDateRange()}
-        </div>
-      </DivDebugBaselineGrid>,
-      ]}
-    />
+    <>
+      <StickySubNav className={isOutOfPosition => clsx(
+        // Set pages keep the 2rem section gap. Detail only had 1.5rem
+        // before the large photo, so the set pad reads as leftover there.
+        selectedPhoto ? 'pb-6' : 'pb-8',
+        'border-b',
+        isOutOfPosition ? 'border-medium' : 'border-transparent mb-[-1px]',
+      )}>
+        <AnimateItems
+          type="bottom"
+          distanceOffset={10}
+          animateOnFirstLoadOnly
+          items={[renderTitle]}
+        />
+      </StickySubNav>
+      {renderRichContent &&
+        <AppGrid contentMain={
+          <AnimateItems
+            type="bottom"
+            distanceOffset={10}
+            animateOnFirstLoadOnly
+            items={[renderRichContent]}
+          />
+        } />}
+    </>
   );
 }

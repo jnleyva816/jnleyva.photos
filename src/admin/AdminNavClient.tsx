@@ -1,27 +1,30 @@
 'use client';
 
-import LinkWithLoader from '@/components/LinkWithLoader';
-import LinkWithStatus from '@/components/LinkWithStatus';
+import LinkWithIconLoader from '@/components/LinkWithIconLoader';
 import Note from '@/components/Note';
-import SiteGrid from '@/components/SiteGrid';
+import AppGrid from '@/components/AppGrid';
 import Spinner from '@/components/Spinner';
 import {
   PATH_ADMIN_CONFIGURATION,
   PATH_ADMIN_INSIGHTS,
+  PATH_ADMIN_PHOTOS_UPDATES,
   checkPathPrefix,
   isPathAdminInfo,
+  isPathAdminPhotoEdit,
   isPathTopLevelAdmin,
-} from '@/app/paths';
-import { useAppState } from '@/state/AppState';
+} from '@/app/path';
+import { useAppState } from '@/app/AppState';
 import { clsx } from 'clsx/lite';
 import { differenceInMinutes } from 'date-fns';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { FaRegClock } from 'react-icons/fa';
 import AdminAppInfoIcon from './AdminAppInfoIcon';
-import AdminInfoNav from './AdminInfoNav';
+import LinkWithLoaderBackground from '@/components/LinkWithLoaderBackground';
+import MaskedScroll from '@/components/MaskedScroll';
+import StickySubNav from '@/components/StickySubNav';
 
-// Updates considered recent if they occurred in past 5 minutes
+// Updates from past 5 minutes considered recent
 const areTimesRecent = (dates: Date[]) => dates
   .some(date => differenceInMinutes(new Date(), date) < 5);
 
@@ -33,7 +36,6 @@ export default function AdminNavClient({
   items: {
     label: string,
     href: string,
-    count: number,
   }[]
   mostRecentPhotoUpdateTime?: Date
   includeInsights?: boolean
@@ -51,67 +53,66 @@ export default function AdminNavClient({
     useState(areTimesRecent(updateTimes));
 
   useEffect(() => {
-    // Check every 5 seconds if update times are recent
-    setHasRecentUpdates(areTimesRecent(updateTimes));
+    // Check every 1 second if update times are recent
     const interval = setInterval(() =>
       setHasRecentUpdates(areTimesRecent(updateTimes))
-    , 5_000);
+    , 1_000);
     return () => clearInterval(interval);
   }, [updateTimes]);
 
-  const shouldShowBanner = hasRecentUpdates && isPathTopLevelAdmin(pathname);
+  const shouldShowBanner =
+    hasRecentUpdates &&
+    isPathTopLevelAdmin(pathname) &&
+    pathname !== PATH_ADMIN_PHOTOS_UPDATES;
 
   return (
-    <SiteGrid
-      contentMain={
-        <div className="space-y-4">
-          <div className={clsx(
-            'flex gap-2 pb-3',
-            'border-b border-gray-200 dark:border-gray-800',
-          )}>
-            <div className={clsx(
-              'flex gap-0.5 md:gap-1.5 -mx-1',
-              'grow overflow-x-auto',
-            )}>
-              {items.map(({ label, href, count }) =>
-                <LinkWithStatus
-                  key={label}
-                  href={href}
-                  className={clsx(
-                    'flex gap-0.5',
-                    checkPathPrefix(pathname, href) ? 'font-bold' : 'text-dim',
-                    'px-1 py-0.5 rounded-md',
-                    'hover:text-main',
-                  )}
-                  loadingClassName="bg-gray-200/50 dark:bg-gray-700/50"
-                  prefetch={false}
-                >
-                  <span>{label}</span>
-                  {count > 0 &&
-                    <span>({count})</span>}
-                </LinkWithStatus>)}
-            </div>
-            <LinkWithLoader
-              href={includeInsights
-                ? PATH_ADMIN_INSIGHTS
-                : PATH_ADMIN_CONFIGURATION}
-              className={isPathAdminInfo(pathname)
+    <>
+      <StickySubNav isEnabled={!isPathAdminPhotoEdit(pathname)}>
+        <div className={clsx(
+          'flex gap-2 pb-3',
+          'border-b border-gray-200 dark:border-gray-800',
+        )}>
+          <MaskedScroll
+            className="grow -mx-1 flex gap-1 md:gap-1.5"
+            direction="horizontal"
+          >
+            {items.map(({ label, href }) =>
+              <LinkWithLoaderBackground
+                key={label}
+                href={href}
+                className={clsx(
+                  checkPathPrefix(pathname, href) ? 'font-bold' : 'text-dim',
+                  'hover:text-main active:text-medium',
+                )}
+                prefetch={false}
+              >
+                {label}
+              </LinkWithLoaderBackground>)}
+          </MaskedScroll>
+          <LinkWithIconLoader
+            href={includeInsights
+              ? PATH_ADMIN_INSIGHTS
+              : PATH_ADMIN_CONFIGURATION}
+            className={clsx(
+              isPathAdminInfo(pathname)
                 ? 'font-bold'
-                : 'text-dim'}
-              loader={<Spinner className="translate-y-[-0.75px]" />}
-            >
-              <AdminAppInfoIcon />
-            </LinkWithLoader>
-          </div>
-          {shouldShowBanner &&
-            <Note icon={<FaRegClock className="shrink-0" />}>
-              Photo updates detected—they may take several minutes to show up
-              for visitors
-            </Note>}
-          {isPathAdminInfo(pathname) &&
-            <AdminInfoNav {...{ includeInsights }} />}
+                : 'text-dim',
+              'hover:text-main active:text-dim',
+            )}
+            icon={<AdminAppInfoIcon />}
+            loader={<Spinner className="translate-y-[-0.75px]" />}
+          />
         </div>
-      }
-    />
+      </StickySubNav>
+      {shouldShowBanner &&
+        <AppGrid
+          contentMain={
+            <Note icon={<FaRegClock className="shrink-0" />}>
+              Photo updates detected—they may take several minutes to show
+              up for visitors
+            </Note>
+          }
+        />}
+    </>
   );
 }

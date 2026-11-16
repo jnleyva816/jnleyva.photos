@@ -1,19 +1,7 @@
-import { useState, useEffect } from 'react';
+import useMediaQuery from './useMediaQuery';
+
+const MEDIA_QUERY_SELECTOR = '(hover: hover)';
 
 export default function useSupportsHover() {
-  const [supportsHover, setSupportsHover] = useState(true);
-
-  useEffect(() => {
-    const mql = window.matchMedia('(hover: hover)');
-    setSupportsHover(mql.matches);
-
-    const listener = (e: MediaQueryListEvent) => {
-      setSupportsHover(e.matches);
-    };
-
-    mql.addEventListener('change', listener);
-    return () => mql.removeEventListener('change', listener);
-  }, []);
-
-  return supportsHover;
-};
+  return useMediaQuery(MEDIA_QUERY_SELECTOR);
+}

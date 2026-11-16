@@ -1,22 +1,26 @@
 'use client';
 
 import useSwrInfinite from 'swr/infinite';
-import {
-  ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from 'react';
-import SiteGrid from '@/components/SiteGrid';
+import { ReactNode, useCallback, useMemo, useRef } from 'react';
+import AppGrid from '@/components/AppGrid';
 import Spinner from '@/components/Spinner';
 import { getPhotosCachedAction, getPhotosAction } from '@/photo/actions';
-import { Photo, PhotoSetCategory } from '.';
+import { Photo } from '.';
+import { PhotoSetCategory } from '../category';
 import { clsx } from 'clsx/lite';
-import { useAppState } from '@/state/AppState';
-import { GetPhotosOptions } from './db';
-import useVisible from '@/utility/useVisible';
-import { ADMIN_DB_OPTIMIZE_ENABLED } from '@/app/config';
+import { useAppState } from '@/app/AppState';
+import useVisibility from '@/utility/useVisibility';
+import { SortBy } from './sort';
+import { useAppText } from '@/i18n/state/client';
+import { isTagPrivate } from '@/tag';
+
+// Future reader:
+// Adding useIsHydrated check caused <PhotoLarge /> images
+// to flicker on home feed
+
+const SIZE_KEY_SEPARATOR = '__';
+const getSizeFromKey = (key: string) =>
+  parseInt(key.split(SIZE_KEY_SEPARATOR)[1]);
 
 export type RevalidatePhoto = (
   photoId: string,
@@ -24,85 +28,120 @@ export type RevalidatePhoto = (
 ) => Promise<any>;
 
 export default function InfinitePhotoScroll({
+  initialPhotos,
   cacheKey,
   initialOffset,
   itemsPerPage,
   sortBy,
-  tag,
+  sortWithPriority,
+  excludeFromFeeds,
+  query,
+  recent,
+  year,
   camera,
-  simulation,
+  lens,
+  album,
+  tag,
+  recipe,
+  film,
+  focal,
+  moreButtonClassName = 'mt-4',
   wrapMoreButtonInGrid,
   useCachedPhotos = true,
   includeHiddenPhotos,
   children,
 }: {
+  // Required for masonry grid:
+  // initialPhotos necessary to build layout without random gaps
+  initialPhotos?: Photo[]
   initialOffset: number
   itemsPerPage: number
-  sortBy?: GetPhotosOptions['sortBy']
+  sortBy?: SortBy
+  sortWithPriority?: boolean
+  excludeFromFeeds?: boolean
   cacheKey: string
+  moreButtonClassName?: string
   wrapMoreButtonInGrid?: boolean
   useCachedPhotos?: boolean
   includeHiddenPhotos?: boolean
   children: (props: {
+    key: string
     photos: Photo[]
-    onLastPhotoVisible: () => void
+    onLastPhotoVisible?: () => void
     revalidatePhoto?: RevalidatePhoto
   }) => ReactNode
 } & PhotoSetCategory) {
-  const { swrTimestamp, isUserSignedIn } = useAppState();
+  const { isUserSignedIn } = useAppState();
 
-  const key = `${swrTimestamp}-${cacheKey}`;
+  const { utility } = useAppText();
 
   const keyGenerator = useCallback(
     (size: number, prev: Photo[]) => prev && prev.length === 0
       ? null
-      : [key, size]
-    , [key]);
+      : `${cacheKey}${SIZE_KEY_SEPARATOR}${size}`
+    , [cacheKey]);
+
+  const isPrivateTag = isTagPrivate(tag);
 
   const fetcher = useCallback((
-    [_key, size]: [string, number],
+    keyWithSize: string,
     warmOnly?: boolean,
   ) =>
     (useCachedPhotos ? getPhotosCachedAction : getPhotosAction)({
-      offset: initialOffset + size * itemsPerPage,
+      offset: initialOffset + getSizeFromKey(keyWithSize) * itemsPerPage,
       sortBy,
+      sortWithPriority,
+      excludeFromFeeds,
       limit: itemsPerPage,
-      hidden: includeHiddenPhotos ? 'include' : 'exclude',
-      tag,
+      hidden: isPrivateTag
+        ? 'only'
+        : includeHiddenPhotos ? 'include' : 'exclude',
+      query,
+      recent,
+      year,
       camera,
-      simulation,
+      lens,
+      album,
+      tag: isPrivateTag ? undefined : tag,
+      recipe,
+      film,
+      focal,
     }, warmOnly)
   , [
     useCachedPhotos,
     sortBy,
+    sortWithPriority,
+    excludeFromFeeds,
     initialOffset,
     itemsPerPage,
     includeHiddenPhotos,
-    tag,
+    isPrivateTag,
+    query,
+    recent,
+    year,
     camera,
-    simulation,
+    lens,
+    album,
+    tag,
+    recipe,
+    film,
+    focal,
   ]);
 
-  const { data, isLoading, isValidating, error, mutate, size, setSize } =
+  const { data, isLoading, isValidating, error, mutate, setSize } =
     useSwrInfinite<Photo[]>(
       keyGenerator,
       fetcher,
       {
-        initialSize: ADMIN_DB_OPTIMIZE_ENABLED ? 0 : 2,
+        initialSize: 2,
         revalidateFirstPage: false,
         revalidateOnFocus: Boolean(isUserSignedIn),
         revalidateOnReconnect: Boolean(isUserSignedIn),
       },
     );
 
-  useEffect(() => {
-    if (ADMIN_DB_OPTIMIZE_ENABLED) {
-      fetcher(['', 0], true);
-    }
-  }, [fetcher]);
-
   const buttonContainerRef = useRef<HTMLDivElement>(null);
-  
+
   const isLoadingOrValidating = isLoading || isValidating;
 
   const isFinished = useMemo(() =>
@@ -111,57 +150,76 @@ export default function InfinitePhotoScroll({
 
   const advance = useCallback(() => {
     if (!isFinished && !isLoadingOrValidating) {
-      setSize(size => size + 1);
+      setSize((data?.length ?? 0) + 1);
     }
-  }, [isFinished, isLoadingOrValidating, setSize]);
-
-  const photos = useMemo(() => (data ?? [])?.flat(), [data]);
+  }, [isFinished, isLoadingOrValidating, setSize, data]);
 
   const revalidatePhoto: RevalidatePhoto = useCallback((
     photoId: string,
     revalidateRemainingPhotos?: boolean,
   ) => mutate(data, {
-    revalidate: (_data: Photo[], [_, size]:[string, number]) => {
+    // SWR passes the page's key, so derive its index from the key itself.
+    // A photo absent from loaded pages lives in server-rendered content,
+    // which shifts every page when it's removed
+    revalidate: (_data: Photo[], key: string) => {
       const i = (data ?? []).findIndex(photos =>
         photos.some(photo => photo.id === photoId));
+      const size = getSizeFromKey(key);
       return revalidateRemainingPhotos ? size >= i : size === i;
     },
   } as any), [data, mutate]);
 
-  useVisible({ ref: buttonContainerRef, onVisible: () => {
-    if (ADMIN_DB_OPTIMIZE_ENABLED && size === 0) {
-      advance();
-    }
-  }});
+  useVisibility({ ref: buttonContainerRef, onVisible: advance });
 
-  const renderMoreButton = () =>
+  const renderMoreButton =
     <div ref={buttonContainerRef}>
       <button
+        type="button"
         onClick={() => error ? mutate() : advance()}
-        disabled={isLoading || isValidating}
+        disabled={isLoadingOrValidating}
         className={clsx(
           'w-full flex justify-center',
           isLoadingOrValidating && 'subtle',
         )}
       >
         {error
-          ? 'Try Again'
+          ? utility.tryAgain
           : isLoadingOrValidating
             ? <Spinner size={20} />
-            : 'Load More'}
+            : utility.loadMore}
       </button>
     </div>;
 
+  const flattenedPhotos = initialPhotos
+    ? initialPhotos.concat(data?.flat() ?? [])
+    : undefined;
+
   return (
-    <div className="space-y-4">
-      {children({
-        photos, 
-        onLastPhotoVisible: advance,
-        revalidatePhoto,
-      })}
-      {!isFinished && (wrapMoreButtonInGrid
-        ? <SiteGrid contentMain={renderMoreButton()} />
-        : renderMoreButton())}
-    </div>
+    <>
+      {flattenedPhotos
+        ? children({
+          key: cacheKey,
+          photos: flattenedPhotos,
+          onLastPhotoVisible: !isFinished ? advance : undefined,
+          revalidatePhoto,
+        })
+        : (
+          data?.map((photos, index) => (
+            children({
+              key: `${cacheKey}-${index}`,
+              photos,
+              onLastPhotoVisible: index === data.length - 1
+                ? advance
+                : undefined,
+              revalidatePhoto,
+            })
+          ))
+        )}
+      {!isFinished && <div className={moreButtonClassName}>
+        {wrapMoreButtonInGrid
+          ? <AppGrid contentMain={renderMoreButton} />
+          : renderMoreButton}
+      </div>}
+    </>
   );
 }

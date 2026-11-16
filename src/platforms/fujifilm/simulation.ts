@@ -1,4 +1,4 @@
-import { parseFujifilmMakerNote } from '.';
+import { parseFujifilmMakerNote } from './server';
 
 const TAG_ID_SATURATION = 0x1003;
 const TAG_ID_FILM_MODE  = 0x1401;
@@ -39,15 +39,15 @@ const getFujifilmSimulationFromSaturation = (
   value?: number,
 ): FujifilmSimulationFromSaturation | undefined => {
   switch (value) {
-  case 0x300: return 'monochrome';
-  case 0x301: return 'monochrome-r';
-  case 0x302: return 'monochrome-ye';
-  case 0x303: return 'monochrome-g';
-  case 0x310: return 'sepia';
-  case 0x500: return 'acros';
-  case 0x501: return 'acros-r';
-  case 0x502: return 'acros-ye';
-  case 0x503: return 'acros-g';
+    case 0x300: return 'monochrome';
+    case 0x301: return 'monochrome-r';
+    case 0x302: return 'monochrome-ye';
+    case 0x303: return 'monochrome-g';
+    case 0x310: return 'sepia';
+    case 0x500: return 'acros';
+    case 0x501: return 'acros-r';
+    case 0x502: return 'acros-ye';
+    case 0x503: return 'acros-g';
   }
 };
 
@@ -55,22 +55,22 @@ const getFujifilmMode = (
   value?: number,
 ): FujifilmMode | undefined => {
   switch (value) {
-  case 0x000: return 'provia';
-  case 0x100: return 'portrait';
-  case 0x110: return 'portrait-saturation';
-  case 0x120: return 'astia'; // can be encoded as 'portrait-skin-tone'
-  case 0x130: return 'portrait-sharpness';
-  case 0x300: return 'portrait-ex';
-  case 0x200:
-  case 0x400: return 'velvia';
-  case 0x500: return 'pro-neg-std';
-  case 0x501: return 'pro-neg-hi';
-  case 0x600: return 'classic-chrome';
-  case 0x700: return 'eterna';
-  case 0x800: return 'classic-neg';
-  case 0x900: return 'eterna-bleach-bypass';
-  case 0xa00: return 'nostalgic-neg';
-  case 0xb00: return 'reala';
+    case 0x000: return 'provia';
+    case 0x100: return 'portrait';
+    case 0x110: return 'portrait-saturation';
+    case 0x120: return 'astia'; // can be encoded as 'portrait-skin-tone'
+    case 0x130: return 'portrait-sharpness';
+    case 0x300: return 'portrait-ex';
+    case 0x200:
+    case 0x400: return 'velvia';
+    case 0x500: return 'pro-neg-std';
+    case 0x501: return 'pro-neg-hi';
+    case 0x600: return 'classic-chrome';
+    case 0x700: return 'eterna';
+    case 0x800: return 'classic-neg';
+    case 0x900: return 'eterna-bleach-bypass';
+    case 0xa00: return 'nostalgic-neg';
+    case 0xb00: return 'reala';
   }
 };
 
@@ -80,7 +80,7 @@ interface FujifilmSimulationLabel {
   large: string
 }
 
-const FILM_SIMULATION_LABELS: Record<
+const FUJIFILM_SIMULATION_LABELS: Record<
   FujifilmSimulation,
   FujifilmSimulationLabel
 > = {
@@ -206,16 +206,31 @@ const FILM_SIMULATION_LABELS: Record<
   },
 };
 
-export const FILM_SIMULATION_FORM_INPUT_OPTIONS = Object
-  .entries(FILM_SIMULATION_LABELS)
+export const FUJIFILM_SIMULATION_FORM_INPUT_OPTIONS = Object
+  .entries(FUJIFILM_SIMULATION_LABELS)
   .map(([value, label]) => (
     { value, label: label.large } as
     { value: FujifilmSimulation, label: string }
   ))
   .sort((a, b) => a.label.localeCompare(b.label));
 
-export const labelForFilmSimulation = (simulation: FujifilmSimulation) =>
-  FILM_SIMULATION_LABELS[simulation];
+const ALL_POSSIBLE_FUJIFILM_SIMULATION_LABELS = Object
+  .values(FUJIFILM_SIMULATION_LABELS)
+  .flatMap(({ small, medium, large }) => [
+    small.toLocaleLowerCase(),
+    medium.toLocaleLowerCase(),
+    large.toLocaleLowerCase(),
+  ]);
+
+export const isStringFujifilmSimulation = (film?: string) =>
+  film !== undefined &&
+  Object.keys(FUJIFILM_SIMULATION_LABELS).includes(film);
+
+export const isStringFujifilmSimulationLabel = (film: string) =>
+  ALL_POSSIBLE_FUJIFILM_SIMULATION_LABELS.includes(film.toLocaleLowerCase());
+
+export const labelForFujifilmSimulation = (film: FujifilmSimulation) =>
+  FUJIFILM_SIMULATION_LABELS[film];
 
 export const getFujifilmSimulationFromMakerNote = (
   bytes: Buffer,
@@ -227,14 +242,14 @@ export const getFujifilmSimulationFromMakerNote = (
     bytes,
     (tag, numbers) => {
       switch (tag) {
-      case TAG_ID_SATURATION:
-        filmModeFromSaturation =
-          getFujifilmSimulationFromSaturation(numbers[0]);
-        break;
-      case TAG_ID_FILM_MODE:
-        filmMode =
-          getFujifilmMode(numbers[0]);
-        break;
+        case TAG_ID_SATURATION:
+          filmModeFromSaturation =
+            getFujifilmSimulationFromSaturation(numbers[0]);
+          break;
+        case TAG_ID_FILM_MODE:
+          filmMode =
+            getFujifilmMode(numbers[0]);
+          break;
       }
     },
   );

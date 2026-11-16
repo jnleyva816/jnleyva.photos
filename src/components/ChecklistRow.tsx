@@ -30,6 +30,7 @@ export default function ChecklistRow({
             ? 'warning'
             : optional ? 'optional' : 'missing'}
         loading={isPending}
+        className="translate-y-[1px]"
       />}
       content={<>
         <div className={clsx(
@@ -38,9 +39,9 @@ export default function ChecklistRow({
         )}>
           {title}
           {experimental &&
-            <ExperimentalBadge className="translate-y-[-0.5px]" />}
+            <ExperimentalBadge className="translate-y-[0.5px]" />}
         </div>
-        <div className="leading-relaxed text-medium">
+        <div className="leading-relaxed text-medium space-y-1.5">
           {children}
         </div>
       </>}

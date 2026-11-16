@@ -1,0 +1,298 @@
+'use client';
+
+import { useCallback, useRef } from 'react';
+import {
+  Photo,
+  downloadFileNameForPhoto,
+  getNextPhoto,
+  getPreviousPhoto,
+} from '@/photo';
+import { PhotoSetCategory } from '../category';
+import PhotoLink from './PhotoLink';
+import { pathForAdminPhotoEdit, pathForPhoto } from '@/app/path';
+import { useAppState } from '@/app/AppState';
+import { AnimationConfig } from '@/components/AnimateItems';
+import { clsx } from 'clsx/lite';
+import { HiChevronRight, HiChevronLeft } from 'react-icons/hi2';
+import useNavigateOrRunActionWithToast
+  from '@/components/useNavigateOrRunActionWithToast';
+import {
+  deletePhotoAction,
+  syncPhotoAction,
+  toggleFavoritePhotoAction,
+} from './actions';
+import { isPhotoFav } from '@/tag';
+import Tooltip from '@/components/Tooltip';
+import {
+  ALLOW_PUBLIC_DOWNLOADS,
+  PHOTO_TITLE_SERIF,
+  SHOW_KEYBOARD_SHORTCUT_TOOLTIPS,
+} from '@/app/config';
+import { downloadFileFromBrowser } from '@/utility/url';
+import useKeydownHandler from '@/utility/useKeydownHandler';
+import { KEY_COMMANDS } from './key-commands';
+import { syncPhotoConfirmText } from '@/admin/confirm';
+import { useAppText } from '@/i18n/state/client';
+
+const ANIMATION_LEFT: AnimationConfig = { type: 'left', duration: 0.3 };
+const ANIMATION_RIGHT: AnimationConfig = { type: 'right', duration: 0.3 };
+
+const ICON_CLASSNAME = clsx(
+  PHOTO_TITLE_SERIF ? 'text-[1.4rem]' : 'text-[1.1rem]',
+);
+
+// Match naked nav icon buttons (SwitcherItem width="narrow") on small screens.
+// sm+ stays text ("Prev" / "Next").
+const ICON_BUTTON_LAYOUT_CLASSNAME = clsx(
+  'max-sm:inline-flex max-sm:items-center max-sm:justify-center',
+  'max-sm:w-[42px] max-sm:h-[32px] max-sm:rounded-lg',
+  // LinkWithLoaderBackground adds its own padding and offset
+  'max-sm:mx-0! max-sm:my-0! max-sm:px-0! max-sm:py-0!',
+);
+
+const ICON_BUTTON_CLASSNAME = clsx(
+  ICON_BUTTON_LAYOUT_CLASSNAME,
+  'max-sm:text-gray-400 max-sm:dark:text-gray-600',
+  'max-sm:hover:text-gray-700 max-sm:dark:hover:text-gray-400',
+  'max-sm:hover:bg-gray-100 max-sm:active:bg-gray-200/75',
+  'max-sm:dark:hover:bg-gray-800/75 max-sm:dark:active:bg-gray-900',
+);
+
+// No previous/next photo: lighter than the enabled icon, and not a control,
+// so hover/active must not shift the color or fill.
+const ICON_BUTTON_DISABLED_CLASSNAME = clsx(
+  ICON_BUTTON_LAYOUT_CLASSNAME,
+  'max-sm:text-gray-300! max-sm:dark:text-gray-700!',
+  'max-sm:hover:text-gray-300! max-sm:dark:hover:text-gray-700!',
+  'max-sm:active:text-gray-300! max-sm:dark:active:text-gray-700!',
+  'max-sm:hover:bg-transparent! max-sm:active:bg-transparent!',
+  'max-sm:dark:hover:bg-transparent! max-sm:dark:active:bg-transparent!',
+);
+
+export default function PhotoPrevNextActions({
+  photo,
+  photos = [],
+  className,
+  hasAiContentGeneration,
+  ...categories
+}: {
+  photo?: Photo
+  photos?: Photo[]
+  className?: string
+  hasAiContentGeneration: boolean
+} & PhotoSetCategory) {
+  const { setNextPhotoAnimation, isUserSignedIn } = useAppState();
+
+  const appText = useAppText();
+
+  const photoTitle = photo
+    ? photo.title
+      ? `'${photo.title}'`
+      : appText.photo.photo.toLocaleLowerCase()
+    : undefined;
+  const downloadUrl = photo?.url;
+  const downloadFileName = photo
+    ? downloadFileNameForPhoto(photo)
+    : undefined;
+
+  const toggleFavorite = useCallback(() => {
+    if (photo?.id) { return toggleFavoritePhotoAction(photo.id); }
+  }, [photo]);
+
+  const navigateToPhotoEdit = useNavigateOrRunActionWithToast({
+    pathOrAction: photo ? pathForAdminPhotoEdit(photo) : undefined,
+    toastMessage: `Editing ${photoTitle} ...`,
+  });
+
+  const favoritePhoto = useNavigateOrRunActionWithToast({
+    pathOrAction: toggleFavorite,
+    toastMessage: `Favoriting ${photoTitle} ...`,
+  });
+
+  const unfavoritePhoto = useNavigateOrRunActionWithToast({
+    pathOrAction: toggleFavorite,
+    toastMessage: `Unfavoriting ${photoTitle} ...`,
+  });
+
+  const syncPhoto = useNavigateOrRunActionWithToast({
+    pathOrAction: useCallback(() => {
+      if (photo?.id) { return syncPhotoAction(photo.id); }
+    }, [photo]),
+    toastMessage: `Syncing ${photoTitle} ...`,
+  });
+
+  const deletePhoto = useNavigateOrRunActionWithToast({
+    pathOrAction: useCallback(() => {
+      if (photo?.id && photo.url) {
+        return deletePhotoAction(photo.id, photo.url, true);
+      }
+    }, [photo]),
+    toastMessage: `Deleting ${photoTitle} ...`,
+  });
+
+  const refPrevious = useRef<HTMLAnchorElement | null>(null);
+  const refNext = useRef<HTMLAnchorElement | null>(null);
+
+  const previousPhoto = photo ? getPreviousPhoto(photo, photos) : undefined;
+  const nextPhoto = photo ? getNextPhoto(photo, photos) : undefined;
+
+  const pathPrevious = previousPhoto
+    ? pathForPhoto({ photo: previousPhoto, ...categories })
+    : undefined;
+
+  const pathNext = nextPhoto
+    ? pathForPhoto({ photo: nextPhoto, ...categories })
+    : undefined;
+
+  const onKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      switch (e.key.toUpperCase()) {
+        case KEY_COMMANDS.delete[1]:
+          if (isUserSignedIn) {
+            deletePhoto();
+          }
+          break;
+      }
+    } else {
+      switch (e.key.toUpperCase()) {
+      // Public commands
+        case KEY_COMMANDS.prev[0]:
+          if (pathPrevious) {
+            setNextPhotoAnimation?.(ANIMATION_RIGHT);
+            refPrevious.current?.click();
+          }
+          break;
+        case KEY_COMMANDS.next[0]:
+          if (pathNext) {
+            setNextPhotoAnimation?.(ANIMATION_LEFT);
+            refNext.current?.click();
+          }
+          break;
+          // Admin commands
+        case KEY_COMMANDS.edit:
+          if (isUserSignedIn) {
+            navigateToPhotoEdit();
+          }
+          break;
+        case KEY_COMMANDS.favorite:
+          if (isUserSignedIn && photo && !isPhotoFav(photo)) {
+            favoritePhoto();
+          }
+          break;
+        case KEY_COMMANDS.unfavorite:
+          if (isUserSignedIn && photo && isPhotoFav(photo)) {
+            unfavoritePhoto();
+          }
+          break;
+        case KEY_COMMANDS.download:
+          if (
+            (isUserSignedIn || ALLOW_PUBLIC_DOWNLOADS) &&
+          downloadUrl &&
+          downloadFileName
+          ) {
+            downloadFileFromBrowser(downloadUrl, downloadFileName);
+          }
+          break;
+        case KEY_COMMANDS.sync:
+          if (
+            isUserSignedIn &&
+            photo &&
+            window.confirm(syncPhotoConfirmText(photo, hasAiContentGeneration))
+          ) {
+            syncPhoto();
+          }
+          break;
+      };
+    }
+  }, [
+    setNextPhotoAnimation,
+    pathPrevious,
+    pathNext,
+    isUserSignedIn,
+    navigateToPhotoEdit,
+    photo,
+    favoritePhoto,
+    unfavoritePhoto,
+    downloadUrl,
+    downloadFileName,
+    syncPhoto,
+    deletePhoto,
+    hasAiContentGeneration,
+  ]);
+  useKeydownHandler({ onKeyDown });
+
+  return (
+    <div className={clsx(
+      'flex items-center',
+      className,
+    )}>
+      <div className={clsx(
+        'flex gap-2 select-none',
+        // Icon buttons match nav height; text links stay on the baseline
+        'max-sm:h-[32px] max-sm:items-center',
+        'sm:h-4 sm:items-start',
+        '*:select-none',
+      )}>
+        <Tooltip
+          triggerIsFocusable
+          {...SHOW_KEYBOARD_SHORTCUT_TOOLTIPS && {
+            content: appText.nav.prev,
+            keyCommand: KEY_COMMANDS.prev[0],
+          }}
+        >
+          <PhotoLink
+            {...categories}
+            ref={refPrevious}
+            photo={previousPhoto}
+            nextPhotoAnimation={ANIMATION_RIGHT}
+            className={previousPhoto
+              ? ICON_BUTTON_CLASSNAME
+              : ICON_BUTTON_DISABLED_CLASSNAME}
+            scroll={false}
+            loaderType="badge"
+            prefetch
+          >
+            <HiChevronLeft className={clsx(
+              'sm:hidden',
+              ICON_CLASSNAME,
+            )} />
+            <span className="hidden sm:inline-block uppercase">
+              {appText.nav.prevShort}
+            </span>
+          </PhotoLink>
+        </Tooltip>
+        <span className="text-extra-extra-dim text-[1.25rem] font-serif">
+          /
+        </span>
+        <Tooltip
+          triggerIsFocusable
+          {...SHOW_KEYBOARD_SHORTCUT_TOOLTIPS && {
+            content: appText.nav.next,
+            keyCommand: KEY_COMMANDS.next[0],
+          }}
+        >
+          <PhotoLink
+            {...categories}
+            ref={refNext}
+            photo={nextPhoto}
+            nextPhotoAnimation={ANIMATION_LEFT}
+            className={nextPhoto
+              ? ICON_BUTTON_CLASSNAME
+              : ICON_BUTTON_DISABLED_CLASSNAME}
+            scroll={false}
+            loaderType="badge"
+            prefetch
+          >
+            <HiChevronRight className={clsx(
+              'sm:hidden',
+              ICON_CLASSNAME,
+            )} />
+            <span className="hidden sm:inline-block uppercase">
+              {appText.nav.nextShort}
+            </span>
+          </PhotoLink>
+        </Tooltip>
+      </div>
+    </div>
+  );
+};

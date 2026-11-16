@@ -1,25 +1,23 @@
 import { ReactNode } from 'react';
 
 export default function ImageContainer({
-  width,
-  height,
-  background = 'transparent',
+  solidBackground,
   children,
 }: {
-  width: number
-  height: number
-  background?: 'transparent' | 'black'
+  solidBackground?: boolean
   children: ReactNode
 }) {
   return (
     <div style={{
-      position: 'relative',
+      height: '100%',
+      width: '100%',
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background,
-      width,
-      height,
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      justifyContent: 'flex-start',
+      position: 'relative',
+      overflow: 'hidden',
+      backgroundColor: solidBackground ? 'black' : 'white',
     }}>
       {children}
     </div>

@@ -1,33 +1,28 @@
-import { pathForFocalLength } from '@/app/paths';
+'use client';
+
+import { pathForFocalLength } from '@/app/path';
 import EntityLink, {
   EntityLinkExternalProps,
-} from '@/components/primitives/EntityLink';
-import { TbCone } from 'react-icons/tb';
+} from '@/components/entity/EntityLink';
 import { formatFocalLength } from '.';
+import IconFocalLength from '@/components/icons/IconFocalLength';
+import useCategoryCounts from '@/category/useCategoryCounts';
 
 export default function PhotoFocalLength({
   focal,
-  type,
-  badged,
-  contrast,
-  prefetch,
-  countOnHover,
-  className,
+  ...props
 }: {
   focal: number
-  countOnHover?: number
 } & EntityLinkExternalProps) {
+  const { getFocalLengthCount } = useCategoryCounts();
   return (
     <EntityLink
+      {...props}
       label={formatFocalLength(focal)}
-      href={pathForFocalLength(focal)}
-      icon={<TbCone className="rotate-[270deg]" />}
-      type={type}
-      className={className}
-      badged={badged}
-      contrast={contrast}
-      prefetch={prefetch}
-      hoverEntity={countOnHover}
+      path={pathForFocalLength(focal)}
+      hoverQueryOptions={{ focal }}
+      icon={<IconFocalLength className="translate-y-[-1px]" />}
+      hoverCount={props.hoverCount ?? getFocalLengthCount(focal)}
     />
   );
 }

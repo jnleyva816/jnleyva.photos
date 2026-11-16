@@ -1,10 +1,15 @@
 'use client';
 
-import { Photo, PhotoDateRange } from '@/photo';
+import { Photo, PhotoDateRangePostgres } from '@/photo';
 import PhotoHeader from '@/photo/PhotoHeader';
 import PhotoRecipe from './PhotoRecipe';
-import { useAppState } from '@/state/AppState';
-import { descriptionForRecipePhotos, photoHasRecipe } from '.';
+import { useAppState } from '@/app/AppState';
+import { descriptionForRecipePhotos, getRecipePropsFromPhotos } from '.';
+import { AI_CONTENT_GENERATION_ENABLED } from '@/app/config';
+import { useAppText } from '@/i18n/state/client';
+import PhotoOmRecipe from '@/platforms/om-system/PhotoOmRecipe';
+import { getOmRecipe } from './serialization';
+
 export default function RecipeHeader({
   recipe,
   photos,
@@ -18,37 +23,52 @@ export default function RecipeHeader({
   selectedPhoto?: Photo
   indexNumber?: number
   count?: number
-  dateRange?: PhotoDateRange
+  dateRange?: PhotoDateRangePostgres
 }) {
-  const { setRecipeModalProps } = useAppState();
+  const { recipeModalProps, setRecipeModalProps } = useAppState();
 
-  const photo = photoHasRecipe(selectedPhoto)
-    ? selectedPhoto
-    : photos.find(photoHasRecipe);
+  const appText = useAppText();
+
+  const recipeProps = getRecipePropsFromPhotos(photos, selectedPhoto);
+  const findOmPhoto = (candidates: (Photo | undefined)[]) =>
+    candidates.find(photo =>
+      getOmRecipe(photo?.recipeData) && photo?.recipeTitle === recipe);
+  // Custom titles may name recipes from either brand
+  const omPhoto = findOmPhoto([selectedPhoto]) ??
+    (recipeProps ? undefined : findOmPhoto(photos));
+  const omRecipe = getOmRecipe(omPhoto?.recipeData);
 
   return (
     <PhotoHeader
       recipe={recipe}
-      entity={<PhotoRecipe
+      entity={omRecipe ? <PhotoOmRecipe
+        recipe={omRecipe}
+        recipeKey={recipe}
+        contrast="high"
+        hoverType="none"
+        hoverCount={count}
+      /> : <PhotoRecipe
         recipe={recipe}
         contrast="high"
-        recipeOnClick={() => (
-          photo?.recipeData &&
-          photo?.filmSimulation
-        ) ? setRecipeModalProps?.({
-            simulation: photo.filmSimulation,
-            recipe: photo.recipeData,
-            iso: photo.isoFormatted,
-            exposure: photo.exposureTimeFormatted,
-          })
+        hoverType="none"
+        isShowingRecipeOverlay={Boolean(recipeModalProps)}
+        toggleRecipeOverlay={recipeProps
+          ? () => setRecipeModalProps?.(recipeProps)
           : undefined}
       />}
-      entityDescription={descriptionForRecipePhotos(photos, undefined, count)}
+      entityDescription={descriptionForRecipePhotos(
+        photos,
+        appText,
+        undefined,
+        count,
+        dateRange,
+      )}
       photos={photos}
       selectedPhoto={selectedPhoto}
       indexNumber={indexNumber}
       count={count}
       dateRange={dateRange}
+      hasAiContentGeneration={AI_CONTENT_GENERATION_ENABLED}
       includeShareButton
     />
   );

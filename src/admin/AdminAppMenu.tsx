@@ -1,189 +1,291 @@
 'use client';
 
-import MoreMenu from '@/components/more/MoreMenu';
 import {
+  PATH_ADMIN_ALBUMS,
   PATH_ADMIN_CONFIGURATION,
   PATH_ADMIN_INSIGHTS,
   PATH_ADMIN_PHOTOS,
+  PATH_ADMIN_PHOTOS_UPDATES,
+  PATH_ADMIN_RECIPES,
   PATH_ADMIN_TAGS,
   PATH_ADMIN_UPLOADS,
-  PATH_GRID_INFERRED,
-} from '@/app/paths';
-import { useAppState } from '@/state/AppState';
-import { ImCheckboxUnchecked } from 'react-icons/im';
-import { IoArrowDown, IoArrowUp, IoCloseSharp } from 'react-icons/io5';
+} from '@/app/path';
+import { useAppState } from '@/app/AppState';
+import { useUploadState } from '@/admin/upload/UploadState';
 import { clsx } from 'clsx/lite';
-import { TbPhoto } from 'react-icons/tb';
-import { FiTag } from 'react-icons/fi';
-import { BiLockAlt } from 'react-icons/bi';
 import AdminAppInfoIcon from './AdminAppInfoIcon';
-import { PiSignOutBold } from 'react-icons/pi';
 import { signOutAction } from '@/auth/actions';
-import { ComponentProps } from 'react';
-import { FaRegFolderOpen } from 'react-icons/fa';
-import { FiUploadCloud } from 'react-icons/fi';
-import useIsKeyBeingPressed from '@/utility/useIsKeyBeingPressed';
+import { useMemo } from 'react';
+import IconPhoto from '@/components/icons/IconPhoto';
+import IconUpload from '@/components/icons/IconUpload';
+import IconRecipe from '@/components/icons/IconRecipe';
+import IconTag from '@/components/icons/IconTag';
+import IconFolder from '@/components/icons/IconFolder';
+import IconSignOut from '@/components/icons/IconSignOut';
+import IconBroom from '@/components/icons/IconBroom';
+import IconAdminArrow from '@/components/icons/IconAdminArrow';
+import InsightsIndicatorDot from './insights/InsightsIndicatorDot';
+import Spinner from '@/components/Spinner';
+import { useAppText } from '@/i18n/state/client';
+import SwitcherItemMenu from '@/components/switcher/SwitcherItemMenu';
+import { MoreMenuSection } from '@/components/more/MoreMenu';
+import { FiXSquare } from 'react-icons/fi';
+import { useSelectPhotosState } from './select/SelectPhotosState';
+import { useEditTitlesState } from './edit-titles/EditTitlesState';
+import IconAlbum from '@/components/icons/IconAlbum';
+import IconEdit from '@/components/icons/IconEdit';
+import { HEIGHT_CLASS } from '@/components/switcher/SwitcherItem';
+import { TbSquareRoundedCheck, TbSquareRoundedX } from 'react-icons/tb';
+import useClearCache from './useClearCache';
+
+const labelWithTrailingEllipsis = (text: string) => {
+  const match = text.match(/^(.*?)\s*(\.{3}|…)\s*$/);
+  if (!match?.[1]) { return { label: text }; }
+  return {
+    label: match[1],
+    annotation: match[2],
+  };
+};
 
 export default function AdminAppMenu({
-  active,
-  animateMenuClose,
-  className,
+  isOpen,
+  setIsOpen,
 }: {
-  active?: boolean
-  animateMenuClose?: boolean
-  className?: string
+  isOpen?: boolean
+  setIsOpen?: (isOpen: boolean) => void
 }) {
   const {
     photosCountTotal = 0,
+    photosCountNeedSync = 0,
     uploadsCount = 0,
+    albumsCount = 0,
     tagsCount = 0,
-    selectedPhotoIds,
-    startUpload,
-    setSelectedPhotoIds,
+    recipesCount = 0,
+    isLoadingAdminData,
     refreshAdminData,
-    clearAuthStateAndRedirect,
+    clearAuthStateAndRedirectIfNecessary,
   } = useAppState();
 
-  const isSelecting = selectedPhotoIds !== undefined;
+  const { startUpload } = useUploadState();
 
-  const isAltPressed = useIsKeyBeingPressed('alt');
+  const {
+    isSelectingPhotos,
+    startSelectingPhotos,
+    stopSelectingPhotos,
+  } = useSelectPhotosState();
 
-  const showAppInsightsLink = photosCountTotal > 0 && !isAltPressed;
+  const {
+    isEditingTitles,
+    startEditingTitles,
+    stopEditingTitles,
+  } = useEditTitlesState();
 
-  const items: ComponentProps<typeof MoreMenu>['items'] = [{
-    label: 'Upload Photos',
-    icon: <FiUploadCloud
+  const appText = useAppText();
+
+  const clearCache = useClearCache();
+
+  const sectionUpload: MoreMenuSection = useMemo(() => ({ items: [{
+    label: appText.admin.uploadPhotos,
+    icon: <IconUpload
       size={15}
       className="translate-x-[0.5px] translate-y-[0.5px]"
     />,
-    action: () => new Promise(resolve => {
-      if (startUpload) {
-        startUpload(() => resolve());
-      } else {
-        resolve();
-      }
-    }),
-  }, {
-    label: 'Manage Photos',
-    ...photosCountTotal && {
-      annotation: `${photosCountTotal}`,
-    },
-    icon: <TbPhoto
-      size={15}
-      className="translate-x-[-0.5px] translate-y-[0.5px]"
-    />,
-    href: PATH_ADMIN_PHOTOS,
-  }];
+    annotation: isLoadingAdminData &&
+      <Spinner className="translate-y-[1.5px]" />,
+    action: startUpload,
+  }]}), [appText, isLoadingAdminData, startUpload]);
 
-  if (uploadsCount) {
+  const sectionMain: MoreMenuSection = useMemo(() => {
+    const items: MoreMenuSection['items'] = [];
+
+    if (uploadsCount) {
+      items.push({
+        label: appText.admin.uploadPlural,
+        annotation: `${uploadsCount}`,
+        icon: <IconFolder
+          size={15}
+          className="translate-x-[0.5px] translate-y-[0.5px]"
+        />,
+        href: PATH_ADMIN_UPLOADS,
+      });
+    }
+    if (photosCountNeedSync) {
+      items.push({
+        label: appText.admin.updatePlural,
+        annotation: <>
+          <span className="mr-3 text-blue-500">
+            {photosCountNeedSync}
+          </span>
+          <InsightsIndicatorDot
+            className="inline-block translate-y-[-1px]"
+            colorOverride="blue"
+            size="small"
+          />
+        </>,
+        icon: <IconBroom
+          size={18}
+          className="translate-y-[-0.5px]"
+        />,
+        href: PATH_ADMIN_PHOTOS_UPDATES,
+      });
+    }
+    if (photosCountTotal) {
+      items.push({
+        label: appText.admin.managePhotos,
+        ...photosCountTotal && {
+          annotation: `${photosCountTotal}`,
+        },
+        icon: <IconPhoto
+          size={15}
+          className="translate-x-[-0.5px] translate-y-[0.5px]"
+        />,
+        href: PATH_ADMIN_PHOTOS,
+      });
+    }
+    if (albumsCount) {
+      items.push({
+        label: appText.admin.manageAlbums,
+        annotation: `${albumsCount}`,
+        icon: <IconAlbum
+          size={15}
+          className="translate-x-[-0.5px] translate-y-[0.5px]"
+        />,
+        href: PATH_ADMIN_ALBUMS,
+      });
+    }
+    if (tagsCount) {
+      items.push({
+        label: appText.admin.manageTags,
+        annotation: `${tagsCount}`,
+        icon: <IconTag
+          size={15}
+          className="translate-y-[1.5px]"
+        />,
+        href: PATH_ADMIN_TAGS,
+      });
+    }
+    if (recipesCount) {
+      items.push({
+        label: appText.admin.manageRecipes,
+        annotation: `${recipesCount}`,
+        icon: <IconRecipe
+          size={17}
+          className="translate-x-[-0.5px]"
+        />,
+        href: PATH_ADMIN_RECIPES,
+      });
+    }
+    if (photosCountTotal) {
+      items.push({
+        ...labelWithTrailingEllipsis(isSelectingPhotos
+          ? appText.admin.selectPhotosExit
+          : appText.admin.selectPhotos),
+        icon: isSelectingPhotos
+          ? <TbSquareRoundedX
+            size={17}
+            className="translate-x-[-0.5px] translate-y-[1px]"
+          />
+          : <TbSquareRoundedCheck
+            size={17}
+            className="translate-x-[-0.5px] translate-y-[1px]"
+          />,
+        action: isSelectingPhotos
+          ? stopSelectingPhotos
+          : startSelectingPhotos,
+      });
+      items.push({
+        ...labelWithTrailingEllipsis(isEditingTitles
+          ? appText.admin.editTitlesExit
+          : appText.admin.editTitles),
+        icon: isEditingTitles
+          ? <FiXSquare
+            size={15}
+            className="translate-x-[-0.75px] translate-y-[0.5px]"
+          />
+          : <IconEdit
+            size={17}
+            className="translate-x-[-0.5px] translate-y-[0.5px]"
+          />,
+        action: isEditingTitles
+          ? stopEditingTitles
+          : startEditingTitles,
+      });
+    }
     items.push({
-      label: 'Uploads',
-      annotation: `${uploadsCount}`,
-      icon: <FaRegFolderOpen
-        size={16}
-        className="translate-y-[0.5px]"
+      label: appText.admin.app,
+      icon: <AdminAppInfoIcon
+        size="small"
+        className="translate-x-[-0.5px]"
       />,
-      href: PATH_ADMIN_UPLOADS,
+      sections: [{
+        items: [{
+          label: appText.admin.appInsightsShort,
+          href: PATH_ADMIN_INSIGHTS,
+        }, {
+          label: appText.admin.appConfigShort,
+          href: PATH_ADMIN_CONFIGURATION,
+        }],
+      }, {
+        items: [{
+          label: appText.admin.clearCache,
+          action: clearCache,
+        }],
+      }],
     });
-  }
 
-  if (tagsCount) {
-    items.push({
-      label: 'Manage Tags',
-      annotation: `${tagsCount}`,
-      icon: <FiTag
-        size={15}
-        className="translate-y-[0.5px]"
-      />,
-      href: PATH_ADMIN_TAGS,
-    });
-  }
+    return { items };
+  }, [
+    appText,
+    isSelectingPhotos,
+    startSelectingPhotos,
+    stopSelectingPhotos,
+    isEditingTitles,
+    startEditingTitles,
+    stopEditingTitles,
+    photosCountNeedSync,
+    photosCountTotal,
+    recipesCount,
+    albumsCount,
+    tagsCount,
+    uploadsCount,
+    clearCache,
+  ]);
 
-  items.push({
-    label: showAppInsightsLink
-      ? 'App Insights'
-      : 'App Configuration',
-    icon: <AdminAppInfoIcon
-      size="small"
-      className="translate-x-[-0.5px] translate-y-[-0.5px]"
-    />,
-    href: showAppInsightsLink
-      ? PATH_ADMIN_INSIGHTS
-      : PATH_ADMIN_CONFIGURATION,
-  }, {
-    label: isSelecting
-      ? 'Exit Select'
-      : 'Edit Multiple',
-    icon: isSelecting
-      ? <IoCloseSharp
-        className="text-[18px] translate-x-[-1px] translate-y-[1px]"
-      />
-      : <ImCheckboxUnchecked
-        className="translate-x-[-0.5px] text-[0.75rem]"
-      />,
-    href: PATH_GRID_INFERRED,
-    action: () => {
-      if (isSelecting) {
-        setSelectedPhotoIds?.(undefined);
-      } else {
-        setSelectedPhotoIds?.([]);
-      }
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-      }
-    },
-    shouldPreventDefault: false,
-  }, {
-    label: 'Sign Out',
-    icon: <PiSignOutBold size={15} />,
-    action: () => signOutAction().then(clearAuthStateAndRedirect),
-  });
+  const sectionSignOut: MoreMenuSection = useMemo(() => ({
+    items: [{
+      label: appText.auth.signOut,
+      icon: <IconSignOut size={15} />,
+      action: () => signOutAction().then(clearAuthStateAndRedirectIfNecessary),
+    }],
+  }), [appText.auth.signOut, clearAuthStateAndRedirectIfNecessary]);
+
+  const sections = useMemo(() =>
+    [sectionUpload, sectionMain, sectionSignOut]
+  , [sectionUpload, sectionMain, sectionSignOut]);
 
   return (
-    <MoreMenu
-      header={<div className="flex items-center select-none">
-        <BiLockAlt size={17} className="inline-block w-5 mr-2" />
-        <span className="grow">Admin menu</span>
-      </div>}
-      icon={<div className={clsx(
-        'w-[28px] h-[28px]',
-        'overflow-hidden',
-      )}>
+    <SwitcherItemMenu
+      {...{ isOpen, setIsOpen }}
+      icon={<div className={`w-full ${HEIGHT_CLASS} overflow-hidden`}>
         <div className={clsx(
-          'flex flex-col items-center justify-center gap-2',
-          'relative transition-transform',
-          animateMenuClose ? 'duration-300' : 'duration-0',
-          'translate-y-[-18px]',
+          'relative flex flex-col items-center gap-2',
+          // Closed: show up arrow; open: slide to down
+          // (icon 24px + gap 8px; center in 32px viewport)
+          'translate-y-[-28px]',
         )}>
-          <IoArrowDown size={16} className="shrink-0" />
-          <IoArrowUp size={16} className="shrink-0" />
+          <IconAdminArrow direction="down" />
+          <IconAdminArrow direction="up" />
         </div>
       </div>}
-      align="start"
-      sideOffset={12}
-      alignOffset={-85}
+      align="end"
+      sideOffset={10}
       onOpen={refreshAdminData}
-      className={clsx(
-        'border-medium',
-        className,
-      )}
-      buttonClassName={clsx(
-        'w-full h-full',
-        'flex items-center justify-center',
-        'hover:bg-transparent dark:hover:bg-transparent',
-        'active:bg-transparent dark:active:bg-transparent',
-        'rounded-none focus:outline-none',
-        active
-          ? 'text-black dark:text-white'
-          : 'text-gray-400 dark:text-gray-600',
-      )}
-      buttonClassNameOpen={clsx(
-        'bg-dim text-main!',
-        '[&>*>*]:translate-y-[6px]',
-        !animateMenuClose && '[&>*>*]:duration-300',
-      )}
-      items={items}
+      sections={sections}
       ariaLabel="Admin Menu"
+      classNameButtonOpen={clsx(
+        '[&>*>*]:translate-y-[4px]',
+        '[&>*>*]:duration-300',
+      )}
     />
   );
 }

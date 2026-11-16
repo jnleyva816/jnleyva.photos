@@ -1,20 +1,29 @@
-import AdminCTA from '@/admin/AdminCTA';
 import Container from '@/components/Container';
-import SiteGrid from '@/components/SiteGrid';
-import { IS_SITE_READY, PRESERVE_ORIGINAL_UPLOADS } from '@/app/config';
-import { PATH_ADMIN_CONFIGURATION } from '@/app/paths';
-import AdminAppConfiguration from '@/admin/AdminAppConfiguration';
+import AppGrid from '@/components/AppGrid';
+import {
+  IS_APP_READY,
+  PRESERVE_ORIGINAL_UPLOADS,
+} from '@/app/config';
+import AdminAppConfiguration from '@/admin/config/AdminAppConfiguration';
 import { clsx } from 'clsx/lite';
-import Link from 'next/link';
 import { HiOutlinePhotograph } from 'react-icons/hi';
-import { revalidatePath } from 'next/cache';
+import SignInOrUploadClient from '@/admin/SignInOrUploadClient';
+import Link from 'next/link';
+import { PATH_ADMIN_CONFIGURATION } from '@/app/path';
+import { getAppText } from '@/i18n/state/server';
 
-export default function PhotosEmptyState() {
+export default async function PhotosEmptyState() {
+  const appText = await getAppText();
+
   return (
-    <SiteGrid
+    <AppGrid
       contentMain={
         <Container
-          className="min-h-[20rem] sm:min-h-[30rem] px-8"
+          key="PhotosEmptyState"
+          className={clsx(
+            'min-h-[20rem] sm:min-h-[30rem] px-8',
+            'mt-px',
+          )}
           padding="loose"
         >
           <HiOutlinePhotograph
@@ -25,27 +34,18 @@ export default function PhotosEmptyState() {
             'font-bold text-2xl',
             'text-gray-700 dark:text-gray-200',
           )}>
-            {!IS_SITE_READY ? 'Finish Setup' : 'Setup Complete!'}
+            {!IS_APP_READY
+              ? appText.onboarding.setupIncomplete
+              : appText.onboarding.setupComplete}
           </div>
-          {!IS_SITE_READY
+          {!IS_APP_READY
             ? <AdminAppConfiguration simplifiedView />
             : <div className="max-w-md text-center space-y-6">
-              <div className="space-y-2">
-                <div>
-                  Add your first photo:
-                </div>
-                <AdminCTA
-                  shouldResize={!PRESERVE_ORIGINAL_UPLOADS}
-                  onLastUpload={async () => {
-                    'use server';
-                    // Update upload count in admin nav
-                    revalidatePath('/admin', 'layout');
-                  }}
-                />
-              </div>
+              <SignInOrUploadClient
+                shouldResize={!PRESERVE_ORIGINAL_UPLOADS}
+              />
               <div>
-                Change the name of this blog and other configuration
-                by editing environment variables referenced in
+                {appText.onboarding.setupConfig}
                 {' '}
                 <Link
                   href={PATH_ADMIN_CONFIGURATION}
@@ -55,7 +55,8 @@ export default function PhotosEmptyState() {
                 </Link>
               </div>
             </div>}
-        </Container>}
+        </Container>
+      }
     />
   );
 };

@@ -4,11 +4,10 @@ import {
   MAX_PHOTOS_TO_SHOW_TEMPLATE_TIGHT,
 } from '@/image-response';
 import TemplateImageResponse from
-  '@/image-response/TemplateImageResponse';
-import { getIBMPlexMonoMedium } from '@/app/font';
-import { ImageResponse } from 'next/og';
+  '@/app/TemplateImageResponse';
+import { getIBMPlexMono } from '@/app/font';
 import { getImageResponseCacheControlHeaders } from '@/image-response/cache';
-import { isNextImageReadyBasedOnPhotos } from '@/photo';
+import { ImageResponse } from 'next/og';
 
 export async function GET() {
   const [
@@ -17,35 +16,24 @@ export async function GET() {
     headers,
   ] = await Promise.all([
     getPhotosCached({
-      sortBy: 'priority',
+      sortWithPriority: true,
       limit: MAX_PHOTOS_TO_SHOW_TEMPLATE_TIGHT,
     }).catch(() => []),
-    getIBMPlexMonoMedium(),
+    getIBMPlexMono(),
     getImageResponseCacheControlHeaders(),
   ]);
 
   const { width, height } = IMAGE_OG_DIMENSION;
 
-  // Make sure next/image can be reached from absolute urls,
-  // which may not exist on first pre-render
-  const isNextImageReady = await isNextImageReadyBasedOnPhotos(photos);
-
   return new ImageResponse(
-    (
-      <TemplateImageResponse {...{
-        photos: isNextImageReady ? photos : [],
-        includeHeader: false,
-        outerMargin: 0,
-        width,
-        height,
-        fontFamily,
-      }}/>
-    ),
-    {
+    <TemplateImageResponse {...{
+      photos,
+      includeHeader: false,
+      outerMargin: 0,
       width,
       height,
-      fonts,
-      headers,
-    },
+      fontFamily,
+    }}/>,
+    { width, height, fonts, headers },
   );
 }

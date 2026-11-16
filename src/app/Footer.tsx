@@ -1,69 +1,81 @@
 'use client';
 
 import { clsx } from 'clsx/lite';
-import SiteGrid from '../components/SiteGrid';
+import AppGrid from '../components/AppGrid';
 import ThemeSwitcher from '@/app/ThemeSwitcher';
 import Link from 'next/link';
+import { SHOW_TEMPLATE_ATTRIBUTION } from '@/app/config';
+import RepoLink from '../components/RepoLink';
 import { usePathname } from 'next/navigation';
-import { PATH_ADMIN_PHOTOS, isPathAdmin, isPathSignIn } from './paths';
+import { PATH_ADMIN_PHOTOS, isPathAdmin, isPathSignIn } from './path';
 import SubmitButtonWithStatus from '@/components/SubmitButtonWithStatus';
 import { signOutAction } from '@/auth/actions';
-import Spinner from '@/components/Spinner';
 import AnimateItems from '@/components/AnimateItems';
-import { useAppState } from '@/state/AppState';
+import { useAppState } from '@/app/AppState';
+import Spinner from '@/components/Spinner';
+import { useAppText } from '@/i18n/state/client';
 
 export default function Footer() {
   const pathname = usePathname();
 
-  const { userEmail, clearAuthStateAndRedirect } = useAppState();
+  const {
+    userEmail,
+    userEmailEager,
+    isCheckingAuth,
+    clearAuthStateAndRedirectIfNecessary,
+  } = useAppState();
+
+  const appText = useAppText();
 
   const showFooter = !isPathSignIn(pathname);
 
   const shouldAnimate = !isPathAdmin(pathname);
 
   return (
-    <SiteGrid
+    <AppGrid
       contentMain={
         <AnimateItems
           animateOnFirstLoadOnly
           type={!shouldAnimate ? 'none' : 'bottom'}
           distanceOffset={10}
           items={showFooter
-            ? [<div
+            ? [<footer
               key="footer"
               className={clsx(
                 'flex items-center gap-1',
                 'text-dim min-h-10',
               )}>
-              <div className="flex gap-x-3 xs:gap-x-4 grow flex-wrap">
-                {isPathAdmin(pathname)
+              <div className={clsx(
+                'flex gap-x-3 xs:gap-x-4 grow flex-wrap',
+                'w-full min-w-0',
+              )}>
+                {userEmail || userEmailEager
                   ? <>
-                    {userEmail === undefined &&
-                      <Spinner size={14} className="translate-y-[2px]" />}
-                    {userEmail && <>
-                      <div className={clsx(
-                        'truncate max-w-full',
-                      )}>
-                        {userEmail}
-                      </div>
-                      <form action={() => signOutAction()
-                        .then(clearAuthStateAndRedirect)}>
-                        <SubmitButtonWithStatus styleAs="link">
-                          Sign out
-                        </SubmitButtonWithStatus>
-                      </form>
-                    </>}
-                  </>
-                  : <>
-                    <Link href={PATH_ADMIN_PHOTOS}>
-                      Admin
+                    <Link
+                      href={PATH_ADMIN_PHOTOS}
+                      className="truncate max-w-full max-sm:hidden"
+                    >
+                      {userEmail || userEmailEager}
                     </Link>
-                  </>}
+                    <form action={() => signOutAction()
+                      .then(clearAuthStateAndRedirectIfNecessary)}>
+                      <SubmitButtonWithStatus styleAs="link">
+                        {appText.auth.signOut}
+                      </SubmitButtonWithStatus>
+                    </form>
+                  </>
+                  : isCheckingAuth
+                    ? <Spinner size={16} className="translate-y-[2px]" />
+                    : SHOW_TEMPLATE_ATTRIBUTION
+                      ? <RepoLink />
+                      : <Link href={PATH_ADMIN_PHOTOS}>
+                        {appText.nav.admin}
+                      </Link>}
               </div>
-              <div className="flex items-center h-10">
+              <div className="flex items-center h-10 shrink-0">
                 <ThemeSwitcher />
               </div>
-            </div>]
+            </footer>]
             : []}
         />}
     />

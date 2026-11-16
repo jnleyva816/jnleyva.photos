@@ -9,11 +9,10 @@ import {
   PATH_ROOT,
   absolutePathForPhoto,
   absolutePathForPhotoImage,
-} from '@/app/paths';
+} from '@/app/path';
 import PhotoDetailPage from '@/photo/PhotoDetailPage';
-import { getPhotosNearIdCached } from '@/photo/cache';
+import { getPhotosMetaCached, getPhotosNearIdCached } from '@/photo/cache';
 import { cache } from 'react';
-import { getPhotosMeta } from '@/photo/db/query';
 
 const getPhotosNearIdCachedCached = cache((
   photoId: string,
@@ -41,12 +40,13 @@ export async function generateMetadata({
 
   const title = titleForPhoto(photo);
   const description = descriptionForPhoto(photo);
+  const descriptionHtml = descriptionForPhoto(photo, true);
   const images = absolutePathForPhotoImage(photo);
   const url = absolutePathForPhoto({ photo, recipe });
 
   return {
     title,
-    description,
+    description: descriptionHtml,
     openGraph: {
       title,
       images,
@@ -62,7 +62,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function PhotoTagPage({
+export default async function PhotoRecipePage({
   params,
 }: PhotoRecipeProps) {
   const { photoId, recipe: recipeFromParams } = await params;
@@ -74,7 +74,7 @@ export default async function PhotoTagPage({
 
   if (!photo) { redirect(PATH_ROOT); }
 
-  const { count, dateRange } = await getPhotosMeta({ recipe });
+  const { count, dateRange } = await getPhotosMetaCached({ recipe });
 
   return (
     <PhotoDetailPage {...{

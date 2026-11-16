@@ -1,28 +1,53 @@
 'use client';
 
-import AdminChildPage from '@/components/AdminChildPage';
+import AdminPage from '@/admin/AdminPage';
 import { Photo } from '.';
-import { PATH_ADMIN_PHOTOS } from '@/app/paths';
-import { PhotoFormData, convertPhotoToFormData } from './form';
+import { PATH_ADMIN_PHOTOS } from '@/app/path';
+import {
+  PhotoFormData,
+  convertPhotoToFormData,
+} from './form';
 import PhotoForm from './form/PhotoForm';
 import { Tags } from '@/tag';
 import AiButton from './ai/AiButton';
 import usePhotoFormParent from './form/usePhotoFormParent';
-import ExifSyncButton from '@/admin/ExifSyncButton';
+import ExifCaptureButton from '@/admin/ExifCaptureButton';
 import { useState } from 'react';
+import { Recipes } from '@/recipe';
+import { Films } from '@/film';
+import { StorageListResponse } from '@/platforms/storage';
+import { Albums } from '@/album';
+import { Cameras } from '@/camera';
+import { Lenses } from '@/lens';
 
 export default function PhotoEditPageClient({
   photo,
+  photoStorageUrls,
+  photoAlbumTitles,
+  albums,
   uniqueTags,
-  hasAiTextGeneration,
+  uniqueRecipes,
+  uniqueFilms,
+  uniqueCameras,
+  uniqueLenses,
+  hasAiContentGeneration,
   imageThumbnailBase64,
   blurData,
+  hasLocationServices,
 }: {
   photo: Photo
+  photoStorageUrls?: StorageListResponse
+  photoAlbumTitles: string[]
+  albums: Albums
   uniqueTags: Tags
-  hasAiTextGeneration: boolean
+  uniqueRecipes: Recipes
+  uniqueFilms: Films
+  uniqueCameras: Cameras
+  uniqueLenses: Lenses
+  hasAiContentGeneration: boolean
   imageThumbnailBase64: string
   blurData: string
+  hasLocationServices?: boolean
 }) {
   const photoForm = convertPhotoToFormData(photo);
 
@@ -31,8 +56,8 @@ export default function PhotoEditPageClient({
     setIsPending,
     updatedTitle,
     setUpdatedTitle,
-    hasTextContent,
-    setHasTextContent,
+    shouldConfirmAiTextGeneration,
+    setShouldConfirmAiTextGeneration,
     aiContent,
   } = usePhotoFormParent({
     photoForm,
@@ -43,7 +68,7 @@ export default function PhotoEditPageClient({
     useState<Partial<PhotoFormData>>();
 
   return (
-    <AdminChildPage
+    <AdminPage
       backPath={PATH_ADMIN_PHOTOS}
       backLabel="Photos"
       breadcrumb={pending && updatedTitle
@@ -52,9 +77,13 @@ export default function PhotoEditPageClient({
       breadcrumbEllipsis
       accessory={
         <div className="flex gap-2">
-          {hasAiTextGeneration &&
-            <AiButton {...{ aiContent, shouldConfirm: hasTextContent }} />}
-          <ExifSyncButton
+          {hasAiContentGeneration &&
+            <AiButton {...{
+              aiContent,
+              shouldConfirm: shouldConfirmAiTextGeneration,
+              tooltip: 'Generate AI text for all fields',
+            }} />}
+          <ExifCaptureButton
             photoUrl={photo.url}
             onSync={setUpdatedExifData}
           />
@@ -64,14 +93,22 @@ export default function PhotoEditPageClient({
       <PhotoForm
         type="edit"
         initialPhotoForm={photoForm}
+        photoStorageUrls={photoStorageUrls}
         updatedExifData={updatedExifData}
         updatedBlurData={blurData}
+        photoAlbumTitles={photoAlbumTitles}
+        albums={albums}
         uniqueTags={uniqueTags}
-        aiContent={hasAiTextGeneration ? aiContent : undefined}
+        uniqueRecipes={uniqueRecipes}
+        uniqueFilms={uniqueFilms}
+        uniqueCameras={uniqueCameras}
+        uniqueLenses={uniqueLenses}
+        aiContent={hasAiContentGeneration ? aiContent : undefined}
+        hasLocationServices={hasLocationServices}
         onTitleChange={setUpdatedTitle}
-        onTextContentChange={setHasTextContent}
         onFormStatusChange={setIsPending}
+        onFormDataChange={setShouldConfirmAiTextGeneration}
       />
-    </AdminChildPage>
+    </AdminPage>
   );
 };

@@ -1,49 +1,48 @@
 import {
   Photo,
-  PhotoSetCategory,
   altTextForPhoto,
   doesPhotoNeedBlurCompatibility,
 } from '.';
+import { PhotoSetCategory } from '../category';
 import ImageSmall from '@/components/image/ImageSmall';
 import Link from 'next/link';
 import { clsx } from 'clsx/lite';
-import { pathForPhoto } from '@/app/paths';
+import { pathForPhoto } from '@/app/path';
 import { SHOULD_PREFETCH_ALL_LINKS } from '@/app/config';
 import { useRef } from 'react';
-import useVisible from '@/utility/useVisible';
+import useVisibility from '@/utility/useVisibility';
 
 export default function PhotoSmall({
   photo,
-  tag,
-  camera,
-  simulation,
-  focal,
   selected,
   className,
+  classNameImage,
   prefetch = SHOULD_PREFETCH_ALL_LINKS,
   onVisible,
+  ...categories
 }: {
   photo: Photo
   selected?: boolean
   className?: string
+  classNameImage?: string
   prefetch?: boolean
   onVisible?: () => void
 } & PhotoSetCategory) {
   const ref = useRef<HTMLAnchorElement>(null);
 
-  useVisible({ ref, onVisible });
+  useVisibility({ ref, onVisible });
 
   return (
     <Link
       ref={ref}
-      href={pathForPhoto({ photo, tag, camera, simulation, focal })}
+      href={pathForPhoto({ photo, ...categories })}
       className={clsx(
         className,
         'active:brightness-75',
         selected && 'brightness-50',
         'min-w-[50px]',
         'rounded-[3px] overflow-hidden',
-        'border-main',
+        'border border-main',
       )}
       prefetch={prefetch}
     >
@@ -53,6 +52,7 @@ export default function PhotoSmall({
         blurDataURL={photo.blurData}
         blurCompatibilityMode={doesPhotoNeedBlurCompatibility(photo)}
         alt={altTextForPhoto(photo)}
+        classNameImage={classNameImage}
       />
     </Link>
   );

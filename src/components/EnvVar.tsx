@@ -1,27 +1,35 @@
+'use client';
+
 import clsx from 'clsx/lite';
 import { ReactNode } from 'react';
 import CopyButton from './CopyButton';
+import MaskedScroll from './MaskedScroll';
 
 export default function EnvVar({
   variable,
   value,
+  accessory,
   includeCopyButton = true,
   trailingContent,
+  maskScroll = true,
   className,
 }: {
   variable: string,
-  value?: string,
+  value?: string | number,
+  accessory?: ReactNode,
   includeCopyButton?: boolean,
   trailingContent?: ReactNode,
+  maskScroll?: boolean,
   className?: string,
 }) {
   return (
-    <div
+    <MaskedScroll
+      direction="horizontal"
       className={clsx(
-        'inline-flex max-w-full',
-        'overflow-x-auto overflow-y-hidden',
+        maskScroll && 'inline-flex max-w-full overflow-y-hidden',
         className,
       )}
+      enabled={maskScroll}
     >
       <span className="inline-flex items-center gap-1">
         <span className={clsx(
@@ -33,6 +41,7 @@ export default function EnvVar({
         )}>
           {variable}{value && ` = ${value}`}
         </span>
+        {accessory}
         {includeCopyButton &&
           <span className="translate-y-[1px]">
             <CopyButton
@@ -47,6 +56,6 @@ export default function EnvVar({
             {trailingContent}
           </span>}
       </span>
-    </div>
+    </MaskedScroll>
   );
 }

@@ -3,6 +3,7 @@
 import { deleteConfirmationTextForPhoto, Photo, titleForPhoto } from '@/photo';
 import DeletePhotosButton from './DeletePhotosButton';
 import { ComponentProps } from 'react';
+import { useAppText } from '@/i18n/state/client';
 
 export default function DeletePhotoButton({
   photo,
@@ -10,12 +11,13 @@ export default function DeletePhotoButton({
 }: {
   photo: Photo
 } & ComponentProps<typeof DeletePhotosButton>) {
+  const appText = useAppText();
   return (
     <DeletePhotosButton
       {...rest}
       photoIds={[photo.id]}
-      confirmText={deleteConfirmationTextForPhoto(photo)}
-      toastText={`"${titleForPhoto(photo)}" deleted`}
+      photosText={`"${titleForPhoto(photo)}"`}
+      confirmText={deleteConfirmationTextForPhoto(photo, appText)}
     />
   );
 }

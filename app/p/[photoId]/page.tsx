@@ -9,28 +9,35 @@ import {
   PATH_ROOT,
   absolutePathForPhoto,
   absolutePathForPhotoImage,
-} from '@/app/paths';
+} from '@/app/path';
 import PhotoDetailPage from '@/photo/PhotoDetailPage';
-import { getPhotosNearIdCached } from '@/photo/cache';
-import { IS_PRODUCTION, STATICALLY_OPTIMIZED_PHOTOS } from '@/app/config';
-import { getPhotoIds } from '@/photo/db/query';
-import { GENERATE_STATIC_PARAMS_LIMIT } from '@/photo/db';
+import { getPhotoCached, getPhotosNearIdCached } from '@/photo/cache';
 import { cache } from 'react';
+import { staticallyGeneratePhotosIfConfigured } from '@/app/static';
 
 export const maxDuration = 60;
 
-const getPhotosNearIdCachedCached = cache((photoId: string) =>
-  getPhotosNearIdCached(photoId, { limit: RELATED_GRID_PHOTOS_TO_SHOW + 2 }));
+const getPhotosNearIdCachedCached = cache(async (photoId: string) => {
+  const photo = await getPhotoCached(photoId);
+  // Omit related photos when photo is excluded from feeds
+  return photo?.excludeFromFeeds
+    ? {
+      photo: photo,
+      photos: [],
+      photosGrid: [],
+      indexNumber: 0,
+    }
+    :getPhotosNearIdCached(
+      photoId, {
+        limit: RELATED_GRID_PHOTOS_TO_SHOW + 2,
+        excludeFromFeeds: true,
+      },
+    );
+});
 
-export let generateStaticParams:
-  (() => Promise<{ photoId: string }[]>) | undefined = undefined;
-
-if (STATICALLY_OPTIMIZED_PHOTOS && IS_PRODUCTION) {
-  generateStaticParams = async () => {
-    const photos = await getPhotoIds({ limit: GENERATE_STATIC_PARAMS_LIMIT });
-    return photos.map(photoId => ({ photoId }));
-  };
-}
+export const generateStaticParams = staticallyGeneratePhotosIfConfigured(
+  'page',
+);
 
 interface PhotoProps {
   params: Promise<{ photoId: string }>
@@ -46,12 +53,13 @@ export async function generateMetadata({
 
   const title = titleForPhoto(photo);
   const description = descriptionForPhoto(photo);
+  const descriptionHtml = descriptionForPhoto(photo, true);
   const images = absolutePathForPhotoImage(photo);
   const url = absolutePathForPhoto({ photo });
 
   return {
     title,
-    description,
+    description: descriptionHtml,
     openGraph: {
       title,
       images,

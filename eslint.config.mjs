@@ -1,52 +1,75 @@
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { FlatCompat } from '@eslint/eslintrc';
+import { defineConfig, globalIgnores } from 'eslint/config';
+import nextVitals from 'eslint-config-next/core-web-vitals';
+import nextTs from 'eslint-config-next/typescript';
+import stylistic from '@stylistic/eslint-plugin';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  ...compat.extends('next/core-web-vitals', 'next/typescript'), {
+export default defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Rules only: eslint-config-next already registers the jsx-a11y plugin,
+  // and redefining it errors
+  { rules: jsxA11y.flatConfigs.recommended.rules },
+  // Formatting rules moved out of ESLint core into ESLint Stylistic.
+  stylistic.configs['disable-legacy'],
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    '.next/**',
+    'out/**',
+    'build/**',
+    'next-env.d.ts',
+  ]), {
+    // @stylistic/comma-dangle allows `<T,>` only when JSX is enabled.
+    files: ['**/*.tsx'],
+    languageOptions: {
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
+  }, {
+    plugins: {
+      '@stylistic': stylistic,
+    },
     rules: {
+      // Disable rule during Next.js 16 migration
+      'react-hooks/refs': 'off',
       '@next/next/no-img-element': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-require-imports': 'off',
-      'no-unused-expressions': ['warn'],
+      '@stylistic/indent': ['warn', 2],
+      // Core rule does not understand TypeScript expressions.
+      'no-unused-expressions': 'off',
+      '@typescript-eslint/no-unused-expressions': 'warn',
+      'no-duplicate-imports': ['warn', {
+        'allowSeparateTypeImports': true,
+      }],
       '@typescript-eslint/no-unused-vars': [
         'warn', {
           'argsIgnorePattern': '^_',
           'varsIgnorePattern': '^_',
         },
       ],
-      'comma-dangle': [
+      '@stylistic/comma-dangle': [
         'warn',
         'always-multiline',
       ],
-      'indent': [
-        'warn',
-        2,
-      ],
-      'linebreak-style': [
+      '@stylistic/linebreak-style': [
         'warn',
         'unix',
       ],
-      'quotes': [
+      '@stylistic/quotes': [
         'warn',
         'single',
       ],
-      'semi': [
+      '@stylistic/semi': [
         'warn',
         'always',
       ],
-      'max-len': [
+      '@stylistic/max-len': [
         'warn',
         { 'code': 80 },
       ],
     },
-  }];
-
-export default eslintConfig;
+  },
+]);

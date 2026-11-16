@@ -1,5 +1,5 @@
-import { Photo, PhotoDateRange } from '@/photo';
-import PhotoGridContainer from '@/photo/PhotoGridContainer';
+import { Photo, PhotoDateRangePostgres } from '@/photo';
+import PhotoGridHybridContainer from '@/photo/PhotoGridHybridContainer';
 import RecipeHeader from './RecipeHeader';
 
 export default function RecipeOverview({
@@ -12,11 +12,11 @@ export default function RecipeOverview({
   recipe: string,
   photos: Photo[],
   count: number,
-  dateRange?: PhotoDateRange,
+  dateRange?: PhotoDateRangePostgres,
   animateOnFirstLoadOnly?: boolean,
 }) {
   return (
-    <PhotoGridContainer {...{
+    <PhotoGridHybridContainer {...{
       cacheKey: `recipe-${recipe}`,
       photos,
       count,

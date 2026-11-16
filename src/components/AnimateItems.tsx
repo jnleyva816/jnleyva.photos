@@ -1,8 +1,8 @@
 'use client';
 
 import { ReactNode, useRef } from 'react';
-import { Variant, motion } from 'framer-motion';
-import { useAppState } from '@/state/AppState';
+import { Variant, motion, stagger } from 'framer-motion';
+import { useAppState } from '@/app/AppState';
 import usePrefersReducedMotion from '@/utility/usePrefersReducedMotion';
 
 const IGNORE_CAN_START = true;
@@ -46,21 +46,23 @@ function AnimateItems({
   onAnimationComplete,
 }: Props) {
   const {
-    hasLoaded,
+    hasLoadedWithAnimations,
     nextPhotoAnimation,
+    getNextPhotoAnimationId,
     clearNextPhotoAnimation,
   } = useAppState();
 
+  const nextPhotoAnimationId = useRef<string>(undefined);
+
   const prefersReducedMotion = usePrefersReducedMotion();
   
-  const hasLoadedInitial = useRef(hasLoaded);
   const nextPhotoAnimationInitial = useRef(nextPhotoAnimation);
 
   const shouldAnimate = type !== 'none' &&
     !prefersReducedMotion &&
-    !(animateOnFirstLoadOnly && hasLoadedInitial.current);
+    !(animateOnFirstLoadOnly && hasLoadedWithAnimations);
   const shouldStagger =
-    !(staggerOnFirstLoadOnly && hasLoadedInitial.current);
+    !(staggerOnFirstLoadOnly && hasLoadedWithAnimations);
 
   const typeResolved = animateFromAppState
     ? (nextPhotoAnimationInitial.current?.type ?? type)
@@ -70,26 +72,26 @@ function AnimateItems({
     ? (nextPhotoAnimationInitial.current?.duration ?? duration)
     : duration;
 
-  const getInitialVariant = (): Variant => {
-    switch (typeResolved) {
-    case 'left': return {
-      opacity: 0,
-      transform: `translateX(${distanceOffset}px)`,
-    };
-    case 'right': return {
-      opacity: 0,
-      transform: `translateX(${-distanceOffset}px)`,
-    };
-    case 'bottom': return {
-      opacity: 0,
-      transform: `translateY(${distanceOffset}px)`,
-    };
-    default: return {
-      opacity: 0,
-      transform: `translateY(${distanceOffset}px) scale(${scaleOffset})`,
-    };
-    }
-  };
+  const hidden: Variant =
+    (() => {
+      switch (typeResolved) {
+        case 'left': return {
+          opacity: 0,
+          transform: `translateX(${distanceOffset}px)`,
+        };
+        case 'right': return {
+          opacity: 0,
+          transform: `translateX(${-distanceOffset}px)`,
+        };
+        case 'bottom': return {
+          opacity: 0,
+          transform: `translateY(${distanceOffset}px)`,
+        };
+        default: return {
+          opacity: 0,
+          transform: `translateY(${distanceOffset}px) scale(${scaleOffset})`,
+        };
+      }})();
 
   return (
     <motion.div
@@ -100,13 +102,16 @@ function AnimateItems({
         ? {
           show: {
             transition: {
-              staggerChildren: staggerDelay,
+              delayChildren: stagger(staggerDelay),
             },
           },
         } : undefined}
+      onAnimationStart={() => {
+        nextPhotoAnimationId.current = getNextPhotoAnimationId?.();
+      }}
       onAnimationComplete={() => {
         if (animateFromAppState) {
-          clearNextPhotoAnimation?.();
+          clearNextPhotoAnimation?.(nextPhotoAnimationId.current);
         }
         onAnimationComplete?.();
       }}
@@ -116,7 +121,7 @@ function AnimateItems({
           key={itemKeys ? itemKeys[index] : index}
           className={classNameItem}
           variants={{
-            hidden: getInitialVariant(),
+            hidden,
             show: {
               opacity: 1,
               transform: 'translateX(0) translateY(0) scale(1)',
@@ -124,7 +129,7 @@ function AnimateItems({
           }}
           transition={{
             duration: durationResolved,
-            easing: 'easeOut',
+            ease: 'easeOut',
           }}
         >
           {item}

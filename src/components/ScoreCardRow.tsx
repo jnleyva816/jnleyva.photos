@@ -36,14 +36,20 @@ export default function ScoreCardRow({
       className,
     )}>
       <div className={clsx(
-        'flex justify-center pt-[8px] w-11 sm:w-14',
+        'flex justify-center pt-2 w-11',
         'shrink-0 text-icon',
       )}>
         {icon}
       </div>
-      <div className="grow space-y-2 py-1.5 w-full overflow-auto">
+      <div className={clsx(
+        'grow space-y-2 py-1.5 w-full overflow-auto',
+        // Allowing expanded content to flow under expand button
+        expandContent && isExpanded && '-mr-6',
+      )}>
         <div className={clsx(
           'text-main pr-2',
+          // Correct for expanded content in section title
+          expandContent && isExpanded && 'mr-6',
           expandContent && !isExpanded && 'max-w-full truncate',
         )}>
           {typeof content === 'function'

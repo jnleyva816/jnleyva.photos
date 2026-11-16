@@ -4,9 +4,12 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   CopyObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { StorageListResponse, generateStorageId } from '.';
 import { removeUrlProtocol } from '@/utility/url';
+import { formatBytes } from '@/utility/number';
 
 const CLOUDFLARE_R2_BUCKET =
   process.env.NEXT_PUBLIC_CLOUDFLARE_R2_BUCKET ?? '';
@@ -51,9 +54,6 @@ export const isUrlFromCloudflareR2 = (url?: string) => (
   url?.startsWith(CLOUDFLARE_R2_BASE_URL_PUBLIC)
 );
 
-export const cloudflareR2PutObjectCommandForKey = (Key: string) =>
-  new PutObjectCommand({ Bucket: CLOUDFLARE_R2_BUCKET, Key });
-
 export const cloudflareR2Put = async (
   file: Buffer,
   fileName: string,
@@ -90,10 +90,11 @@ export const cloudflareR2List = async (
     Bucket: CLOUDFLARE_R2_BUCKET,
     Prefix,
   }))
-    .then((data) => data.Contents?.map(({ Key, LastModified }) => ({
+    .then((data) => data.Contents?.map(({ Key, LastModified, Size }) => ({
       url: urlForKey(Key),
       fileName: Key ?? '',
       uploadedAt: LastModified,
+      size: Size ? formatBytes(Size) : undefined,
     })) ?? []);
 
 export const cloudflareR2Delete = async (Key: string) => {
@@ -101,4 +102,17 @@ export const cloudflareR2Delete = async (Key: string) => {
     Bucket: CLOUDFLARE_R2_BUCKET,
     Key,
   }));
+};
+
+export const cloudflareR2GetSignedUrl = (
+  Key: string,
+  method: 'GET' | 'PUT',
+  expiresIn: number,
+) => {
+  const client = cloudflareR2Client();
+  const command = method === 'GET'
+    ? new GetObjectCommand({ Bucket: CLOUDFLARE_R2_BUCKET, Key })
+    // eslint-disable-next-line @stylistic/max-len
+    : new PutObjectCommand({ Bucket: CLOUDFLARE_R2_BUCKET, Key, ACL: 'public-read' });
+  return getSignedUrl(client, command, { expiresIn });
 };

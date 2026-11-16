@@ -1,34 +1,86 @@
 import {
-  getExtensionFromStorageUrl,
-  getIdFromStorageUrl,
+  deleteFilesWithPrefix,
+  getFileNamePartsFromStorageUrl,
 } from '@/platforms/storage';
-import { convertExifToFormData } from '@/photo/form';
+import { convertFormDataToPhotoDbInsert } from '@/photo/form';
 import {
+  FujifilmSimulation,
   getFujifilmSimulationFromMakerNote,
 } from '@/platforms/fujifilm/simulation';
 import { ExifData, ExifParserFactory } from 'ts-exif-parser';
 import { PhotoFormData } from './form';
-import { FilmSimulation } from '@/simulation';
 import sharp, { Sharp } from 'sharp';
 import {
+  AUTO_GENERATE_LOCATIONS,
   GEO_PRIVACY_ENABLED,
+  HAS_LOCATION_SERVICES,
   PRESERVE_ORIGINAL_UPLOADS,
 } from '@/app/config';
-import { isExifForFujifilm } from '@/platforms/fujifilm';
+import { isExifForFujifilm } from '@/platforms/fujifilm/server';
 import {
   FujifilmRecipe,
   getFujifilmRecipeFromMakerNote,
 } from '@/platforms/fujifilm/recipe';
-const IMAGE_WIDTH_RESIZE = 200;
+import {
+  getNikonPictureControlFromMakerNote,
+  NikonPictureControl,
+} from '@/platforms/nikon/simulation';
+import { isExifForNikon } from '@/platforms/nikon/server';
+import {
+  deletePhoto,
+  getCustomRecipeTitleForData,
+  renameRecipeForMatchingPhotos,
+} from '@/photo/query';
+import { MAX_PHOTO_UPLOAD_SIZE_IN_BYTES, PhotoDbInsert } from '.';
+import { convertExifToFormData } from './form/server';
+import { getColorFieldsForPhotoForm } from './color/server';
+import exifr from 'exifr';
+import { getCompatibleExifValue } from '@/utility/exif';
+import { fetchUrlWithByteLimit } from '@/utility/fetch';
+import { getPlaceFromCoordinates } from '@/platforms/google-places';
+import {
+  isOmSystemCamera,
+  OmRecipe,
+} from '@/platforms/om-system/recipe';
+import {
+  getOmFocalLengthIn35MmFormat,
+  getOmRecipeFromMakerNote,
+} from '@/platforms/om-system/server';
+
+import { createOmRecipeData, getOmRecipe, isOmRecipeData, parseRecipeData }
+  from '@/recipe/serialization';
+import { isRecipeHashKey } from '@/recipe/key';
+import {
+  createRecipeHashKey,
+  createRecipeIdentityKey,
+} from '@/recipe/server';
+
 const IMAGE_WIDTH_BLUR = 200;
+const IMAGE_WIDTH_DEFAULT = 200;
+const IMAGE_QUALITY_DEFAULT = 80;
+
+// Buffers an image, refusing to exceed `maxBytes`, so that oversized
+// photos fail fast instead of exhausting serverless memory
+export const fetchImageUrlSafely = (url: string) =>
+  fetchUrlWithByteLimit(url, MAX_PHOTO_UPLOAD_SIZE_IN_BYTES);
 
 export const extractImageDataFromBlobPath = async (
-  blobPath: string,
-  options?: {
+  blobPath: string, {
+    includeInitialPhotoFields,
+    generateBlurData,
+    generateResizedImage,
+    updateColorFields = true,
+    lookupLocation,
+    refreshOmRecipe = false,
+  }: {
     includeInitialPhotoFields?: boolean
     generateBlurData?: boolean
     generateResizedImage?: boolean
-  },
+    updateColorFields?: boolean
+    lookupLocation?: boolean
+    // Refresh known OM photos even if the source lost its camera tags.
+    refreshOmRecipe?: boolean
+  } = {},
 ): Promise<{
   blobId?: string
   formDataFromExif?: Partial<PhotoFormData>
@@ -37,28 +89,26 @@ export const extractImageDataFromBlobPath = async (
   fileBytes?: ArrayBuffer
   error?: string
 }> => {
-  const {
-    includeInitialPhotoFields,
-    generateBlurData,
-    generateResizedImage,
-  } = options ?? {};
-
   const url = decodeURIComponent(blobPath);
 
-  const blobId = getIdFromStorageUrl(url);
+  const {
+    fileExtension: extension,
+    fileId: blobId,
+  } = getFileNamePartsFromStorageUrl(url);
 
-  const extension = getExtensionFromStorageUrl(url);
-
-  let exifData: ExifData | undefined;
-  let filmSimulation: FilmSimulation | undefined;
+  let dataExif: ExifData | undefined;
+  let dataExifr: any | undefined;
+  let film: FujifilmSimulation | NikonPictureControl | undefined;
   let recipe: FujifilmRecipe | undefined;
+  let omRecipe: OmRecipe | undefined;
+  let didCheckOmRecipe = false;
   let blurData: string | undefined;
   let imageResizedBase64: string | undefined;
   let shouldStripGpsData = false;
   let error: string | undefined;
 
   const fileBytes = blobPath
-    ? await fetch(url, { cache: 'no-store' }).then(res => res.arrayBuffer())
+    ? await fetchImageUrlSafely(url)
       .catch(e => {
         error = `Error fetching image from ${url}: "${e.message}"`;
         return undefined;
@@ -71,20 +121,46 @@ export const extractImageDataFromBlobPath = async (
 
       // Data for form
       parser.enableBinaryFields(false);
-      exifData = parser.parse();
+      dataExif = parser.parse();
+      dataExifr = await exifr.parse(fileBytes, { xmp: true });
 
-      // Capture film simulation for Fujifilm cameras
-      if (isExifForFujifilm(exifData)) {
+      // Capture film simulation for Fujifilm or Picture Control for Nikon
+      const isOmCamera = isOmSystemCamera(dataExif.tags?.Make);
+      if (isExifForFujifilm(dataExif) || isExifForNikon(dataExif) ||
+        isOmCamera) {
         // Parse exif data again with binary fields
         // in order to access MakerNote tag
         parser.enableBinaryFields(true);
         const exifDataBinary = parser.parse();
         const makerNote = exifDataBinary.tags?.MakerNote;
         if (Buffer.isBuffer(makerNote)) {
-          filmSimulation = getFujifilmSimulationFromMakerNote(makerNote);
-          recipe = getFujifilmRecipeFromMakerNote(makerNote);
+          if (isExifForFujifilm(dataExif)) {
+            film = getFujifilmSimulationFromMakerNote(makerNote);
+            recipe = getFujifilmRecipeFromMakerNote(makerNote);
+          } else if (isExifForNikon(dataExif)) {
+            film = getNikonPictureControlFromMakerNote(makerNote);
+          } else if (isOmCamera) {
+            omRecipe = getOmRecipeFromMakerNote(makerNote);
+            const equivalent = Number(getCompatibleExifValue(
+              'FocalLengthIn35mmFormat', dataExif, dataExifr,
+            ));
+            if ((!Number.isFinite(equivalent) || equivalent <= 0) &&
+              dataExif.tags) {
+              const focalLength = Number(
+                getCompatibleExifValue('FocalLength', dataExif, dataExifr),
+              );
+              const digitalZoomRatio = Number(getCompatibleExifValue(
+                'DigitalZoomRatio', dataExif, dataExifr,
+              ));
+              dataExif.tags.FocalLengthIn35mmFormat =
+                getOmFocalLengthIn35MmFormat(
+                  makerNote, focalLength, digitalZoomRatio,
+                )?.toString();
+            }
+          }
         }
       }
+      didCheckOmRecipe = isOmCamera || (refreshOmRecipe && !recipe);
 
       if (generateBlurData) {
         blurData = await blurImage(fileBytes);
@@ -95,8 +171,8 @@ export const extractImageDataFromBlobPath = async (
       }
 
       shouldStripGpsData = GEO_PRIVACY_ENABLED && (
-        Boolean(exifData.tags?.GPSLatitude) ||
-        Boolean(exifData.tags?.GPSLongitude)
+        Boolean(getCompatibleExifValue('GPSLatitude', dataExif, dataExifr)) ||
+        Boolean(getCompatibleExifValue('GPSLongitude', dataExif, dataExifr))
       );
     }
   } catch (e) {
@@ -105,18 +181,47 @@ export const extractImageDataFromBlobPath = async (
 
   if (error) { console.log(error); }
 
+  const colorFields = updateColorFields
+    ? await getColorFieldsForPhotoForm(url)
+    : undefined;
+
+  const formDataFromExif: Partial<PhotoFormData> | undefined = dataExif
+    ? {
+      ...includeInitialPhotoFields && {
+        hidden: 'false',
+        favorite: 'false',
+        extension,
+        url,
+      },
+      ...generateBlurData && { blurData },
+      ...convertExifToFormData(dataExif, dataExifr, film, recipe),
+      ...didCheckOmRecipe && {
+        recipeData: JSON.stringify(createOmRecipeData(omRecipe)),
+      },
+      ...colorFields,
+    }
+    : undefined;
+
+  if (formDataFromExif && (recipe || didCheckOmRecipe)) {
+    const recipeTitle = await getAutoRecipeTitle(
+      formDataFromExif.recipeData,
+      formDataFromExif.film,
+    );
+    // OM titles always reflect the source, Fujifilm titles only matches
+    if (recipeTitle || didCheckOmRecipe) {
+      formDataFromExif.recipeTitle = recipeTitle ?? '';
+    }
+  }
+
   return {
     blobId,
-    ...exifData && {
+    ...formDataFromExif && {
       formDataFromExif: {
-        ...includeInitialPhotoFields && {
-          hidden: 'false',
-          favorite: 'false',
-          extension,
-          url,
-        },
-        ...generateBlurData && { blurData },
-        ...convertExifToFormData(exifData, filmSimulation, recipe),
+        ...formDataFromExif,
+        ...await getLocationFormFieldsFromExif(
+          formDataFromExif,
+          lookupLocation,
+        ),
       },
     },
     imageResizedBase64,
@@ -126,19 +231,55 @@ export const extractImageDataFromBlobPath = async (
   };
 };
 
+const getLocationFormFieldsFromExif = async (
+  formData: Partial<PhotoFormData>,
+  lookupLocation?: boolean,
+): Promise<Partial<PhotoFormData> | undefined> => {
+  if (
+    !lookupLocation ||
+    !AUTO_GENERATE_LOCATIONS ||
+    GEO_PRIVACY_ENABLED ||
+    !HAS_LOCATION_SERVICES ||
+    !formData.latitude ||
+    !formData.longitude
+  ) {
+    return;
+  }
+
+  const latitude = parseFloat(formData.latitude);
+  const longitude = parseFloat(formData.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return;
+  }
+
+  try {
+    const place = await getPlaceFromCoordinates(latitude, longitude);
+    if (!place) { return; }
+    return {
+      location: JSON.stringify(place),
+      locationDisplayName: place.nameFormatted ?? place.name,
+    };
+  } catch (e) {
+    console.log('Error looking up place from coordinates', e);
+  }
+};
+
 const generateBase64 = async (
   image: ArrayBuffer,
-  middleware: (sharp: Sharp) => Sharp,
+  middleware?: (sharp: Sharp) => Sharp,
 ) => 
-  middleware(sharp(image))
+  (middleware ? middleware(sharp(image)) : sharp(image))
     .withMetadata()
-    .toFormat('jpeg', { quality: 90 })
+    .toFormat('jpeg', { quality: IMAGE_QUALITY_DEFAULT })
     .toBuffer()
     .then(data => `data:image/jpeg;base64,${data.toString('base64')}`);
 
-const resizeImage = async (image: ArrayBuffer) => 
+const resizeImage = async (
+  image: ArrayBuffer,
+  width = IMAGE_WIDTH_DEFAULT,
+) => 
   generateBase64(image, sharp => sharp
-    .resize(IMAGE_WIDTH_RESIZE),
+    .resize(width),
   );
 
 const blurImage = async (image: ArrayBuffer) => 
@@ -148,10 +289,22 @@ const blurImage = async (image: ArrayBuffer) =>
     .blur(4),
   );
 
-export const resizeImageFromUrl = async (url: string) => 
+export const getImageBase64FromUrl = async (url: string) => 
   fetch(decodeURIComponent(url))
     .then(res => res.arrayBuffer())
-    .then(buffer => resizeImage(buffer))
+    .then(buffer => generateBase64(buffer))
+    .catch(e => {
+      console.log(`Error getting image base64 from URL (${url})`, e);
+      return '';
+    });
+
+export const resizeImageFromUrl = async (
+  url: string,
+  width?: number,
+) => 
+  fetch(decodeURIComponent(url))
+    .then(res => res.arrayBuffer())
+    .then(buffer => resizeImage(buffer, width))
     .catch(e => {
       console.log(`Error resizing image from URL (${url})`, e);
       return '';
@@ -165,6 +318,16 @@ export const blurImageFromUrl = async (url: string) =>
       console.log(`Error blurring image from URL (${url})`, e);
       return '';
     });
+
+export const resizeImageToBytes = async (
+  image: ArrayBuffer,
+  width: number,
+  quality = IMAGE_QUALITY_DEFAULT,
+) => 
+  sharp(image)
+    .resize(width)
+    .toFormat('jpeg', { quality })
+    .toBuffer();
 
 const GPS_NULL_STRING = '-';
 
@@ -192,3 +355,82 @@ export const removeGpsData = async (image: ArrayBuffer) =>
     })
     .toFormat('jpeg', { quality: PRESERVE_ORIGINAL_UPLOADS ? 95 : 80 })
     .toBuffer();
+
+// Prefer a custom title already given to matching recipe data
+export const getAutoRecipeTitle = async (
+  recipeData?: string,
+  film?: string,
+) =>
+  recipeData
+    ? await getCustomRecipeTitleForData(recipeData, film) ??
+      createRecipeHashKey(recipeData)
+    : undefined;
+
+type RecipeFields = { recipeData?: string | object, film?: string };
+
+// Custom titles survive re-extraction while their recipe is unchanged
+export const shouldPreserveRecipeTitle = (
+  title: string | undefined,
+  previous: RecipeFields,
+  next: RecipeFields,
+) => {
+  if (!title || isRecipeHashKey(title)) { return false; }
+  const previousKey =
+    createRecipeIdentityKey(previous.recipeData, previous.film);
+  return previousKey !== undefined &&
+    previousKey === createRecipeIdentityKey(next.recipeData, next.film);
+};
+
+export const convertFormDataToPhotoDbInsertAndLookupRecipeTitle =
+  async (...args: Parameters<typeof convertFormDataToPhotoDbInsert>):
+  Promise<ReturnType<typeof convertFormDataToPhotoDbInsert>> => {
+    const photo = convertFormDataToPhotoDbInsert(...args);
+
+    const data = parseRecipeData(photo.recipeData);
+    if (isOmRecipeData(data)) {
+      const recipe = isOmSystemCamera(photo.make)
+        ? getOmRecipe(data) : undefined;
+      photo.recipeData = JSON.stringify(createOmRecipeData(recipe));
+    }
+
+    if (!photo.recipeTitle) {
+      photo.recipeTitle =
+        await getAutoRecipeTitle(photo.recipeData, photo.film);
+    } else if (isRecipeHashKey(photo.recipeTitle)) {
+      // Derive hash titles from data rather than trusting a submitted title
+      photo.recipeTitle = createRecipeHashKey(photo.recipeData);
+    }
+
+    return photo;
+  };
+
+export const propagateRecipeTitleIfNecessary = async (
+  formData: FormData,
+  photo: PhotoDbInsert,
+  previousTitle?: string,
+) => {
+  if (
+    // Only propagate recipe title if set by user before lookup
+    formData.get('recipeTitle') &&
+    photo.recipeTitle &&
+    photo.recipeTitle !== previousTitle
+  ) {
+    await renameRecipeForMatchingPhotos({
+      photoId: photo.id,
+      previousTitle,
+      title: photo.recipeTitle,
+      recipeData: photo.recipeData,
+      film: photo.film,
+    });
+  }
+};
+
+export const deletePhotoAndFiles = async (
+  photoId: string,
+  photoUrl: string,
+) =>
+  deletePhoto(photoId)
+    .then(() => {
+      const { fileNameBase } = getFileNamePartsFromStorageUrl(photoUrl);
+      return deleteFilesWithPrefix(fileNameBase);
+    });

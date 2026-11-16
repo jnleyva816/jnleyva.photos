@@ -9,7 +9,7 @@ import {
   PATH_ROOT,
   absolutePathForPhoto,
   absolutePathForPhotoImage,
-} from '@/app/paths';
+} from '@/app/path';
 import PhotoDetailPage from '@/photo/PhotoDetailPage';
 import {
   getPhotosMetaCached,
@@ -18,7 +18,7 @@ import {
 import {
   PhotoCameraProps,
   cameraFromPhoto,
-  getCameraFromParams,
+  formatCameraParams,
 } from '@/camera';
 import { cache } from 'react';
 
@@ -29,7 +29,7 @@ const getPhotosNearIdCachedCached = cache((
 ) =>
   getPhotosNearIdCached(
     photoId, {
-      camera: getCameraFromParams({ make, model }),
+      camera: formatCameraParams({ make, model }),
       limit: RELATED_GRID_PHOTOS_TO_SHOW + 2,
     },
   ));
@@ -45,6 +45,7 @@ export async function generateMetadata({
 
   const title = titleForPhoto(photo);
   const description = descriptionForPhoto(photo);
+  const descriptionHtml = descriptionForPhoto(photo, true);
   const images = absolutePathForPhotoImage(photo);
   const url = absolutePathForPhoto({
     photo,
@@ -53,7 +54,7 @@ export async function generateMetadata({
 
   return {
     title,
-    description,
+    description: descriptionHtml,
     openGraph: {
       title,
       images,

@@ -1,36 +1,39 @@
-import { pathForTag } from '@/app/paths';
-import { FaTag } from 'react-icons/fa';
+'use client';
+
+import { pathForTag } from '@/app/path';
 import { formatTag } from '.';
 import EntityLink, {
   EntityLinkExternalProps,
-} from '@/components/primitives/EntityLink';
+} from '@/components/entity/EntityLink';
+import IconTag from '@/components/icons/IconTag';
+import useCategoryCounts from '@/category/useCategoryCounts';
+import { useAppState } from '@/app/AppState';
+import AdminTagMenu from './AdminTagMenu';
+import { ReactNode } from 'react';
 
 export default function PhotoTag({
   tag,
-  type,
-  badged,
-  contrast,
-  prefetch,
-  countOnHover,
-  className,
+  label,
+  showAdminMenu,
+  ...props
 }: {
   tag: string
-  countOnHover?: number
+  label?: ReactNode
+  showAdminMenu?: boolean
 } & EntityLinkExternalProps) {
+  const { getTagCount } = useCategoryCounts();
+  const { isUserSignedIn } = useAppState();
+  const count = props.hoverCount ?? getTagCount(tag);
   return (
     <EntityLink
-      label={formatTag(tag)}
-      href={pathForTag(tag)}
-      icon={<FaTag
-        size={11}
-        className="translate-y-[0.5px]"
-      />}
-      type={type}
-      className={className}
-      badged={badged}
-      contrast={contrast}
-      prefetch={prefetch}
-      hoverEntity={countOnHover}
+      {...props}
+      label={label ?? formatTag(tag)}
+      path={pathForTag(tag)}
+      hoverQueryOptions={{ tag }}
+      icon={<IconTag size={14} className="translate-x-[0.5px]" />}
+      hoverCount={count}
+      action={showAdminMenu && isUserSignedIn &&
+        <AdminTagMenu {...{ tag, count }} />}
     />
   );
 }

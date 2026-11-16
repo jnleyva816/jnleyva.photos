@@ -1,19 +1,26 @@
-import {
-  INFINITE_SCROLL_GRID_INITIAL,
-  generateOgImageMetaForPhotos,
-} from '@/photo';
+import { generateOgImageMetaForPhotos } from '@/photo';
 import PhotosEmptyState from '@/photo/PhotosEmptyState';
 import { Metadata } from 'next/types';
-import { getPhotoSidebarData } from '@/photo/data';
-import { getPhotos, getPhotosMeta } from '@/photo/db/query';
+import { getPhotos } from '@/photo/query';
 import { cache } from 'react';
 import PhotoGridPage from '@/photo/PhotoGridPage';
+import PhotoGridHybridContainer from '@/photo/PhotoGridHybridContainer';
+import { getDataForCategoriesCached } from '@/category/cache';
+import { getPhotosMetaCached } from '@/photo/cache';
+import {
+  EXPRESSIVE_LAYOUT_ENABLED,
+  MASONRY_GRID_ENABLED,
+  USER_DEFAULT_SORT_OPTIONS,
+} from '@/app/config';
+import { FEED_META_QUERY_OPTIONS, feedQueryOptions } from '@/feed';
+import { PATH_GRID } from '@/app/path';
 
 export const dynamic = 'force-static';
+export const maxDuration = 60;
 
-const getPhotosCached = cache(() => getPhotos({
-  limit: INFINITE_SCROLL_GRID_INITIAL,
-}));
+const getPhotosCached = cache(() => getPhotos(feedQueryOptions({
+  isGrid: true,
+})));
 
 export async function generateMetadata(): Promise<Metadata> {
   const photos = await getPhotosCached()
@@ -25,24 +32,49 @@ export default async function GridPage() {
   const [
     photos,
     photosCount,
-    tags,
-    cameras,
-    simulations,
-    recipes,
+    photosCountWithExcludes,
+    categories,
   ] = await Promise.all([
     getPhotosCached()
       .catch(() => []),
-    getPhotosMeta()
+    getPhotosMetaCached(FEED_META_QUERY_OPTIONS)
       .then(({ count }) => count)
       .catch(() => 0),
-    ...getPhotoSidebarData(),
+    getPhotosMetaCached()
+      .then(({ count }) => count)
+      .catch(() => 0),
+    getDataForCategoriesCached(),
   ]);
 
-  return (
-    photos.length > 0
-      ? <PhotoGridPage
-        {...{ photos, photosCount, tags, cameras, simulations, recipes }}
+  if (photos.length === 0) {
+    return <PhotosEmptyState />;
+  }
+
+  // Classic layout: grid + sidebar (matches main)
+  if (!EXPRESSIVE_LAYOUT_ENABLED) {
+    return (
+      <PhotoGridPage
+        {...{
+          photos,
+          photosCount,
+          photosCountWithExcludes,
+          ...USER_DEFAULT_SORT_OPTIONS,
+          ...categories,
+        }}
       />
-      : <PhotosEmptyState />
+    );
+  }
+
+  // Expressive: wide matted feed without sidebar
+  return (
+    <PhotoGridHybridContainer
+      cacheKey={`page-${PATH_GRID}`}
+      photos={photos}
+      count={photosCount}
+      excludeFromFeeds
+      prioritizeInitialPhotos
+      matted={!MASONRY_GRID_ENABLED}
+      {...USER_DEFAULT_SORT_OPTIONS}
+    />
   );
 }

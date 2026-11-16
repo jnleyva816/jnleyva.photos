@@ -1,5 +1,5 @@
-import { Photo, PhotoDateRange } from '@/photo';
-import PhotoGridContainer from '@/photo/PhotoGridContainer';
+import { Photo, PhotoDateRangePostgres } from '@/photo';
+import PhotoGridHybridContainer from '@/photo/PhotoGridHybridContainer';
 import FocalLengthHeader from './FocalLengthHeader';
 
 export default function FocalLengthOverview({
@@ -12,11 +12,11 @@ export default function FocalLengthOverview({
   focal: number,
   photos: Photo[],
   count: number,
-  dateRange?: PhotoDateRange,
+  dateRange?: PhotoDateRangePostgres,
   animateOnFirstLoadOnly?: boolean,
 }) {
   return (
-    <PhotoGridContainer {...{
+    <PhotoGridHybridContainer {...{
       cacheKey: `focal-${focal}`,
       photos,
       count,

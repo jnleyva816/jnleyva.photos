@@ -1,28 +1,49 @@
 'use client';
 
-import { PATH_FEED_INFERRED } from '@/app/paths';
 import InfinitePhotoScroll from './InfinitePhotoScroll';
 import PhotosLarge from './PhotosLarge';
+import { SortBy } from './sort';
+import { PhotoSetCategory } from '../category';
 
 export default function PhotosLargeInfinite({
+  cacheKey,
   initialOffset,
   itemsPerPage,
+  sortBy,
+  sortWithPriority,
+  excludeFromFeeds,
+  showStorageCheck,
+  ...categories
 }: {
+  cacheKey: string
   initialOffset: number
   itemsPerPage: number
-}) {
+  sortBy?: SortBy
+  sortWithPriority?: boolean
+  excludeFromFeeds?: boolean
+  showStorageCheck?: boolean
+} & PhotoSetCategory) {
   return (
     <InfinitePhotoScroll
-      cacheKey={`page-${PATH_FEED_INFERRED}`}
+      cacheKey={cacheKey}
       initialOffset={initialOffset}
       itemsPerPage={itemsPerPage}
+      sortBy={sortBy}
+      sortWithPriority={sortWithPriority}
+      excludeFromFeeds={excludeFromFeeds}
       wrapMoreButtonInGrid
+      {...categories}
     >
-      {({ photos, onLastPhotoVisible, revalidatePhoto }) =>
+      {({ key, photos, onLastPhotoVisible, revalidatePhoto }) =>
         <PhotosLarge
-          photos={photos}
-          onLastPhotoVisible={onLastPhotoVisible}
-          revalidatePhoto={revalidatePhoto}
+          key={key}
+          {...{
+            photos,
+            ...categories,
+            onLastPhotoVisible,
+            revalidatePhoto,
+            showStorageCheck,
+          }}
         />}
     </InfinitePhotoScroll>
   );

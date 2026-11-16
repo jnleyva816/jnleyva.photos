@@ -1,25 +1,40 @@
 import AnimateItems from '@/components/AnimateItems';
-import { Photo, PhotoDateRange, PhotoSetCategory } from '.';
+import { Photo, PhotoDateRangePostgres } from '.';
+import { PhotoSetCategory } from '../category';
 import PhotoLarge from './PhotoLarge';
-import SiteGrid from '@/components/SiteGrid';
+import AppGrid from '@/components/AppGrid';
 import PhotoGrid from './PhotoGrid';
 import TagHeader from '@/tag/TagHeader';
 import CameraHeader from '@/camera/CameraHeader';
-import FilmSimulationHeader from '@/simulation/FilmSimulationHeader';
-import { TAG_HIDDEN } from '@/tag';
-import HiddenHeader from '@/tag/HiddenHeader';
+import FilmHeader from '@/film/FilmHeader';
+import { TAG_PRIVATE } from '@/tag';
+import PrivateHeader from '@/tag/PrivateHeader';
 import FocalLengthHeader from '@/focal/FocalLengthHeader';
 import PhotoHeader from './PhotoHeader';
-import { JSX } from 'react';
 import RecipeHeader from '@/recipe/RecipeHeader';
+import { ReactNode } from 'react';
+import LensHeader from '@/lens/LensHeader';
+import {
+  ADMIN_STORAGE_DEBUG_ENABLED,
+  AI_CONTENT_GENERATION_ENABLED,
+} from '@/app/config';
+import YearHeader from '@/year/YearHeader';
+import RecentsHeader from '@/recents/RecentsHeader';
+import AlbumHeader from '@/album/AlbumHeader';
+import QueryHeader from '@/query/QueryHeader';
 
 export default function PhotoDetailPage({
   photo,
   photos,
   photosGrid,
-  tag,
+  query,
+  recent,
+  year,
   camera,
-  simulation,
+  lens,
+  album,
+  tag,
+  film,
   recipe,
   focal,
   indexNumber,
@@ -33,15 +48,68 @@ export default function PhotoDetailPage({
   photosGrid?: Photo[]
   indexNumber?: number
   count?: number
-  dateRange?: PhotoDateRange
+  dateRange?: PhotoDateRangePostgres
   shouldShare?: boolean
   includeFavoriteInAdminMenu?: boolean
 } & PhotoSetCategory) {
-  let customHeader: JSX.Element | undefined;
+  let customHeader: ReactNode | undefined;
 
-  if (tag) {
-    customHeader = tag === TAG_HIDDEN
-      ? <HiddenHeader
+  if (query) {
+    customHeader = <QueryHeader
+      query={query}
+      photos={photos}
+      selectedPhoto={photo}
+      indexNumber={indexNumber}
+      count={count}
+      dateRange={dateRange}
+    />;
+  } else if (year) {
+    customHeader = <YearHeader
+      year={year}
+      photos={photos}
+      selectedPhoto={photo}
+      indexNumber={indexNumber}
+      count={count}
+      dateRange={dateRange}
+    />;
+  } else if (recent) {
+    customHeader = <RecentsHeader
+      photos={photos}
+      selectedPhoto={photo}
+      indexNumber={indexNumber}
+      count={count}
+      dateRange={dateRange}
+    />;
+  } else if (camera) {
+    customHeader = <CameraHeader
+      camera={camera}
+      photos={photos}
+      selectedPhoto={photo}
+      indexNumber={indexNumber}
+      count={count}
+      dateRange={dateRange}
+    />;
+  } else if (lens) {
+    customHeader = <LensHeader
+      lens={lens}
+      photos={photos}
+      selectedPhoto={photo}
+      indexNumber={indexNumber}
+      count={count}
+      dateRange={dateRange}
+    />;
+  } else if (album) {
+    customHeader = <AlbumHeader
+      album={album}
+      photos={photos}
+      selectedPhoto={photo}
+      indexNumber={indexNumber}
+      count={count}
+      dateRange={dateRange}
+    />;
+  } else if (tag) {
+    customHeader = tag === TAG_PRIVATE
+      ? <PrivateHeader
         photos={photos}
         selectedPhoto={photo}
         indexNumber={indexNumber}
@@ -56,18 +124,9 @@ export default function PhotoDetailPage({
         count={count}
         dateRange={dateRange}
       />;
-  } else if (camera) {
-    customHeader = <CameraHeader
-      camera={camera}
-      photos={photos}
-      selectedPhoto={photo}
-      indexNumber={indexNumber}
-      count={count}
-      dateRange={dateRange}
-    />;
-  } else if (simulation) {
-    customHeader = <FilmSimulationHeader
-      simulation={simulation}
+  } else if (film) {
+    customHeader = <FilmHeader
+      film={film}
       photos={photos}
       selectedPhoto={photo}
       indexNumber={indexNumber}
@@ -94,15 +153,13 @@ export default function PhotoDetailPage({
   }
 
   return (
-    <div>
-      <SiteGrid
-        className="mt-1.5 mb-6"
-        contentMain={customHeader ?? <PhotoHeader
-          selectedPhoto={photo}
-          photos={photos}
-          recipe={recipe}
-        />}
-      />
+    <div className="mt-1.5">
+      {customHeader ?? <PhotoHeader
+        selectedPhoto={photo}
+        photos={photos}
+        recipe={recipe}
+        hasAiContentGeneration={AI_CONTENT_GENERATION_ENABLED}
+      />}
       <AnimateItems
         className="md:mb-8"
         animateFromAppState
@@ -110,33 +167,46 @@ export default function PhotoDetailPage({
           <PhotoLarge
             key={photo.id}
             photo={photo}
+            album={album}
             primaryTag={tag}
             priority
             prefetchRelatedLinks
+            query={query}
+            recent={recent}
+            year={year}
             showTitle={Boolean(customHeader)}
             showTitleAsH1
             showCamera={!camera}
-            showSimulation={!simulation}
+            showLens={!lens}
+            showFilm={!film}
             showRecipe={!recipe}
             shouldShare={shouldShare}
-            shouldShareTag={tag !== undefined}
+            shouldShareQuery={query !== undefined}
+            shouldShareRecents={recent !== undefined}
+            shouldShareYear={year !== undefined}
             shouldShareCamera={camera !== undefined}
-            shouldShareSimulation={simulation !== undefined}
+            shouldShareLens={lens !== undefined}
+            shouldShareAlbum={album !== undefined}
+            shouldShareTag={tag !== undefined}
+            shouldShareFilm={film !== undefined}
             shouldShareRecipe={recipe !== undefined}
             shouldShareFocalLength={focal !== undefined}
             includeFavoriteInAdminMenu={includeFavoriteInAdminMenu}
+            showAdminKeyCommands
+            showStorageCheck={ADMIN_STORAGE_DEBUG_ENABLED}
           />,
         ]}
       />
-      <SiteGrid
-        sideFirstOnMobile
+      <AppGrid
         contentMain={<PhotoGrid
           photos={photosGrid ?? photos}
-          selectedPhoto={photo}
+          query={query}
           tag={tag}
           camera={camera}
-          simulation={simulation}
+          film={film}
           focal={focal}
+          year={year}
+          recipe={recipe}
           animateOnFirstLoadOnly
         />}
       />

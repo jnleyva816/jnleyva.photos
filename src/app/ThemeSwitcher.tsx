@@ -1,43 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
-import Switcher from '@/components/Switcher';
-import SwitcherItem from '@/components/SwitcherItem';
+import Switcher from '@/components/switcher/Switcher';
+import SwitcherItem from '@/components/switcher/SwitcherItem';
 import { BiDesktop, BiMoon, BiSun } from 'react-icons/bi';
+import { useAppText } from '@/i18n/state/client';
+import useIsHydrated from '@/utility/useIsHydrated';
 
 export default function ThemeSwitcher () {
-  const [mounted, setMounted] = useState(false);
+  // `theme` is only known on the client, so hold off on marking
+  // an item active until the server and client agree
+  const isHydrated = useIsHydrated();
+
+  const appText = useAppText();
+
   const { theme, setTheme } = useTheme();
 
-  // useEffect only runs on the client, so now we can safely show the UI
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
   return (
-    <Switcher>
+    <Switcher
+      // Apply offset due to outline strategy
+      className="translate-x-[-1px]"
+    >
       <SwitcherItem
-        title="System"
         icon={<BiDesktop size={16} />}
         onClick={() => setTheme('system')}
-        active={theme === 'system'}
+        active={isHydrated && theme === 'system'}
+        tooltip={{ content: appText.theme.system }}
       />
       <SwitcherItem
-        title="Light"
         icon={<BiSun size={18} />}
         onClick={() => setTheme('light')}
-        active={theme === 'light'}
+        active={isHydrated && theme === 'light'}
+        tooltip={{ content: appText.theme.light }}
       />
       <SwitcherItem
-        title="Dark"
         icon={<BiMoon size={16} />}
         onClick={() => setTheme('dark')}
-        active={theme === 'dark'}
+        active={isHydrated && theme === 'dark'}
+        tooltip={{ content: appText.theme.dark }}
       />
     </Switcher>
   );
